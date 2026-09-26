@@ -420,12 +420,12 @@ fun CameraQrScannerView(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = IndigoPrimary,
                             unfocusedBorderColor = Slate700,
-                            focusedContainerColor = Slate800,
-                            unfocusedContainerColor = Slate800,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White,
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black
                         ),
-                        textStyle = MaterialTheme.typography.bodySmall.copy(color = Color.White)
+                        textStyle = MaterialTheme.typography.bodySmall.copy(color = Color.Black)
                     )
 
                     Button(

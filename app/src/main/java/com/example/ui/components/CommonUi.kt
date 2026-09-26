@@ -53,23 +53,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Shape
-import com.example.ui.theme.GreenDark
-import com.example.ui.theme.GreenHover
-import com.example.ui.theme.GreenPrimary
 import com.example.data.models.User
 import com.example.data.models.UserRole
-import com.example.ui.theme.AmberContainer
-import com.example.ui.theme.AmberWarning
-import com.example.ui.theme.CrimsonContainer
-import com.example.ui.theme.CrimsonError
-import com.example.ui.theme.EmeraldContainer
-import com.example.ui.theme.EmeraldSuccess
-import com.example.ui.theme.IndigoContainer
-import com.example.ui.theme.IndigoLight
-import com.example.ui.theme.IndigoPrimary
-import com.example.ui.theme.Slate700
-import com.example.ui.theme.Slate800
-import com.example.ui.theme.Slate900
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.text.TextStyle
+import com.example.ui.theme.*
 
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
@@ -398,3 +386,24 @@ fun HodAutomatedReportBadge(
         }
     }
 }
+
+@Composable
+fun appOutlinedTextFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = GreenPrimary,
+    unfocusedBorderColor = CardBorderColor,
+    focusedContainerColor = Color.White,
+    unfocusedContainerColor = Color.White,
+    focusedTextColor = Color.Black,
+    unfocusedTextColor = Color.Black,
+    cursorColor = Color.Black,
+    focusedLabelColor = GreenDark,
+    unfocusedLabelColor = TextMuted,
+    disabledTextColor = Color.Black,
+    errorTextColor = CrimsonError
+)
+
+fun appTextFieldTextStyle() = TextStyle(
+    color = Color.Black,
+    fontSize = 15.sp,
+    fontWeight = FontWeight.Normal
+)

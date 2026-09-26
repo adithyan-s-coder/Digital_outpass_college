@@ -62,6 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.models.UserRole
@@ -167,15 +168,17 @@ fun LoginScreen(
                                 .menuAnchor()
                                 .fillMaxWidth(),
                             singleLine = true,
+                            textStyle = TextStyle(color = Color.Black, fontSize = 15.sp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = IndigoPrimary,
                                 unfocusedBorderColor = Slate700,
                                 focusedContainerColor = Color.White,
                                 unfocusedContainerColor = Color.White,
-                                focusedTextColor = TextDark,
-                                unfocusedTextColor = TextDark,
+                                focusedTextColor = Color.Black,
+                                unfocusedTextColor = Color.Black,
+                                cursorColor = Color.Black,
                                 focusedLabelColor = IndigoPrimary,
-                                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                unfocusedLabelColor = TextMuted
                             )
                         )
 
@@ -236,13 +239,19 @@ fun LoginScreen(
                             Icon(imageVector = identifierIcon, contentDescription = null, tint = IndigoPrimary)
                         },
                         modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = Color.Black, fontSize = 15.sp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = IndigoPrimary,
                             unfocusedBorderColor = Slate700,
                             focusedContainerColor = Color.White,
                             unfocusedContainerColor = Color.White,
-                            focusedTextColor = TextDark,
-                            unfocusedTextColor = TextDark
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            cursorColor = Color.Black,
+                            focusedLabelColor = IndigoPrimary,
+                            unfocusedLabelColor = TextMuted,
+                            focusedPlaceholderColor = TextMuted,
+                            unfocusedPlaceholderColor = TextMuted
                         ),
                         singleLine = true
                     )
@@ -272,13 +281,19 @@ fun LoginScreen(
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(color = Color.Black, fontSize = 15.sp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = IndigoPrimary,
                             unfocusedBorderColor = Slate700,
                             focusedContainerColor = Color.White,
                             unfocusedContainerColor = Color.White,
-                            focusedTextColor = TextDark,
-                            unfocusedTextColor = TextDark
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black,
+                            cursorColor = Color.Black,
+                            focusedLabelColor = IndigoPrimary,
+                            unfocusedLabelColor = TextMuted,
+                            focusedPlaceholderColor = TextMuted,
+                            unfocusedPlaceholderColor = TextMuted
                         ),
                         singleLine = true
                     )

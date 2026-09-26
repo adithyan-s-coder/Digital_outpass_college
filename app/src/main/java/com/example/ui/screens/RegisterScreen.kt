@@ -91,6 +91,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.models.User
@@ -99,6 +100,11 @@ import com.example.data.models.DepartmentConstants
 import com.example.ui.theme.GreenContainer
 import com.example.ui.theme.GreenPrimary
 import com.example.ui.theme.TextDark
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.WhiteCard
+import com.example.ui.theme.CardBorderColor
+import com.example.ui.theme.GreenMintBackground
+import com.example.ui.theme.GreenBorder
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.IndigoPrimary
 import com.example.ui.theme.Slate700
@@ -154,13 +160,13 @@ fun RegisterScreen(
     if (showPasscodeDialog) {
         AlertDialog(
             onDismissRequest = { showPasscodeDialog = false },
-            containerColor = Slate800,
-            titleContentColor = Color.White,
+            containerColor = WhiteCard,
+            titleContentColor = TextDark,
             icon = {
                 Icon(
                     imageVector = Icons.Default.Lock,
                     contentDescription = null,
-                    tint = Color(0xFFFCD34D),
+                    tint = Color(0xFFD97706),
                     modifier = Modifier.size(28.dp)
                 )
             },
@@ -169,7 +175,7 @@ fun RegisterScreen(
                     text = "Faculty Security Passcode",
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp,
-                    color = Color.White
+                    color = TextDark
                 )
             },
             text = {
@@ -189,6 +195,7 @@ fun RegisterScreen(
                         label = { Text("Faculty Security Passcode") },
                         placeholder = { Text("e.g. VETIAS2026") },
                         singleLine = true,
+                        textStyle = fieldTextStyle(),
                         colors = fieldColors(),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -356,6 +363,7 @@ fun RegisterScreen(
                             placeholder = { Text("Enter your Full Name") },
                             leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = IndigoPrimary) },
                             modifier = Modifier.fillMaxWidth(),
+                            textStyle = fieldTextStyle(),
                             colors = fieldColors(),
                             singleLine = true
                         )
@@ -370,6 +378,7 @@ fun RegisterScreen(
                             placeholder = { Text("Enter your College Email Address") },
                             leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = IndigoPrimary) },
                             modifier = Modifier.fillMaxWidth(),
+                            textStyle = fieldTextStyle(),
                             colors = fieldColors(),
                             singleLine = true
                         )
@@ -405,6 +414,7 @@ fun RegisterScreen(
                             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             modifier = Modifier.fillMaxWidth(),
+                            textStyle = fieldTextStyle(),
                             colors = fieldColors(),
                             singleLine = true
                         )
@@ -419,6 +429,7 @@ fun RegisterScreen(
                             placeholder = { Text("Enter your Roll No / Register Number") },
                             leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = IndigoPrimary) },
                             modifier = Modifier.fillMaxWidth(),
+                            textStyle = fieldTextStyle(),
                             colors = fieldColors(),
                             singleLine = true
                         )
@@ -439,6 +450,7 @@ fun RegisterScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .fillMaxWidth(),
+                                textStyle = fieldTextStyle(),
                                 colors = fieldColors()
                             )
                             ExposedDropdownMenu(
@@ -498,6 +510,7 @@ fun RegisterScreen(
                             leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = IndigoPrimary) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                             modifier = Modifier.fillMaxWidth(),
+                            textStyle = fieldTextStyle(),
                             colors = fieldColors(),
                             singleLine = true
                         )
@@ -513,6 +526,7 @@ fun RegisterScreen(
                             leadingIcon = { Icon(Icons.Default.ContactPhone, contentDescription = null, tint = EmeraldSuccess) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                             modifier = Modifier.fillMaxWidth(),
+                            textStyle = fieldTextStyle(),
                             colors = fieldColors(),
                             singleLine = true
                         )
@@ -997,10 +1011,23 @@ fun RegisterScreen(
 private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = IndigoPrimary,
     unfocusedBorderColor = Slate700,
-    focusedContainerColor = Slate900,
-    unfocusedContainerColor = Slate900,
-    focusedTextColor = Color.White,
-    unfocusedTextColor = Color.White
+    focusedContainerColor = Color.White,
+    unfocusedContainerColor = Color.White,
+    focusedTextColor = Color.Black,
+    unfocusedTextColor = Color.Black,
+    cursorColor = Color.Black,
+    focusedLabelColor = IndigoPrimary,
+    unfocusedLabelColor = TextMuted,
+    focusedPlaceholderColor = TextMuted,
+    unfocusedPlaceholderColor = TextMuted,
+    disabledTextColor = Color.Black,
+    errorTextColor = CrimsonError
+)
+
+private fun fieldTextStyle() = TextStyle(
+    color = Color.Black,
+    fontSize = 15.sp,
+    fontWeight = FontWeight.Normal
 )
 
 @Composable
@@ -1012,9 +1039,6 @@ fun ProfilePhotoPickerField(
     accentColor: Color
 ) {
     var photoZoom by remember { mutableFloatStateOf(1.0f) }
-    var photoRotation by remember { mutableFloatStateOf(0f) }
-    var photoPanX by remember { mutableFloatStateOf(0f) }
-    var photoPanY by remember { mutableFloatStateOf(0f) }
     var showAdjustDialog by remember { mutableStateOf(false) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -1023,10 +1047,6 @@ fun ProfilePhotoPickerField(
         if (uri != null) {
             onPhotoSelected(uri.toString())
             photoZoom = 1.0f
-            photoRotation = 0f
-            photoPanX = 0f
-            photoPanY = 0f
-            showAdjustDialog = true // Automatically open adjustment editor when image is chosen
         }
     }
 
@@ -1034,15 +1054,9 @@ fun ProfilePhotoPickerField(
         AdjustPhotoDialog(
             photoUri = selectedPhotoUri,
             currentZoom = photoZoom,
-            currentRotation = photoRotation,
-            currentPanX = photoPanX,
-            currentPanY = photoPanY,
             accentColor = accentColor,
-            onSave = { zoom, rotation, panX, panY ->
+            onSave = { zoom ->
                 photoZoom = zoom
-                photoRotation = rotation
-                photoPanX = panX
-                photoPanY = panY
                 showAdjustDialog = false
             },
             onDismiss = { showAdjustDialog = false }
@@ -1052,8 +1066,8 @@ fun ProfilePhotoPickerField(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, if (selectedPhotoUri != null) accentColor.copy(alpha = 0.6f) else Slate700),
-        colors = CardDefaults.cardColors(containerColor = Slate900.copy(alpha = 0.75f))
+        border = BorderStroke(1.dp, if (selectedPhotoUri != null) accentColor.copy(alpha = 0.5f) else CardBorderColor),
+        colors = CardDefaults.cardColors(containerColor = WhiteCard)
     ) {
         Column(
             modifier = Modifier
@@ -1078,7 +1092,7 @@ fun ProfilePhotoPickerField(
                             text = title,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = TextDark
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
@@ -1092,7 +1106,7 @@ fun ProfilePhotoPickerField(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = TextMuted,
                         fontSize = 11.sp
                     )
                 }
@@ -1100,14 +1114,14 @@ fun ProfilePhotoPickerField(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Clickable Photo Container with live adjustment preview
+            // Full, Unbroken Photo Container (Shows entire intact image)
             Box(
                 contentAlignment = Alignment.BottomEnd,
                 modifier = Modifier
-                    .size(104.dp)
-                    .clip(CircleShape)
-                    .background(Slate800)
-                    .border(2.dp, if (selectedPhotoUri != null) accentColor else Slate700, CircleShape)
+                    .size(130.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(GreenMintBackground)
+                    .border(2.dp, if (selectedPhotoUri != null) accentColor else CardBorderColor, RoundedCornerShape(18.dp))
                     .clickable {
                         if (selectedPhotoUri == null) {
                             photoPickerLauncher.launch(
@@ -1122,21 +1136,18 @@ fun ProfilePhotoPickerField(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(CircleShape),
+                            .clip(RoundedCornerShape(18.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         AsyncImage(
                             model = selectedPhotoUri,
-                            contentDescription = "Selected Profile Photo",
-                            contentScale = ContentScale.Crop,
+                            contentDescription = "Full Profile Photo",
+                            contentScale = ContentScale.Fit, // Keeps 100% of the image intact, never breaks into parts!
                             modifier = Modifier
                                 .fillMaxSize()
                                 .graphicsLayer {
                                     scaleX = photoZoom
                                     scaleY = photoZoom
-                                    rotationZ = photoRotation
-                                    translationX = photoPanX
-                                    translationY = photoPanY
                                 }
                         )
                     }
@@ -1152,13 +1163,13 @@ fun ProfilePhotoPickerField(
                             Icon(
                                 imageVector = Icons.Default.Person,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(38.dp)
+                                tint = TextMuted,
+                                modifier = Modifier.size(40.dp)
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "TAP TO ADD",
-                                fontSize = 9.sp,
+                                text = "TAP TO UPLOAD",
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = accentColor
                             )
@@ -1169,30 +1180,77 @@ fun ProfilePhotoPickerField(
                 // Overlay badge in bottom-right corner
                 Box(
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(32.dp)
                         .clip(CircleShape)
                         .background(accentColor)
-                        .border(2.dp, Slate900, CircleShape),
+                        .border(2.dp, Color.White, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (selectedPhotoUri != null) Icons.Default.Crop else Icons.Default.PhotoCamera,
-                        contentDescription = "Adjust Photo",
+                        imageVector = if (selectedPhotoUri != null) Icons.Default.ZoomIn else Icons.Default.PhotoCamera,
+                        contentDescription = "Zoom & Preview",
                         tint = Color.White,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
+            // Dedicated Zoom In and Zoom Out Controls right below photo
             if (selectedPhotoUri != null) {
-                Text(
-                    text = "Tap photo or 'Adjust Photo' to pan, zoom, or rotate",
-                    fontSize = 11.sp,
-                    color = EmeraldSuccess,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(GreenContainer)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = { photoZoom = (photoZoom - 0.15f).coerceAtLeast(0.5f) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ZoomOut,
+                            contentDescription = "Zoom Out",
+                            tint = GreenPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Zoom: ${(photoZoom * 100).toInt()}%",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextDark
+                        )
+                        if (photoZoom != 1.0f) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "(Reset)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = accentColor,
+                                modifier = Modifier.clickable { photoZoom = 1.0f }
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = { photoZoom = (photoZoom + 0.15f).coerceAtMost(3.0f) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ZoomIn,
+                            contentDescription = "Zoom In",
+                            tint = GreenPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             } else {
                 Text(
                     text = "* Photo is required for campus ID and outpass gate exit",
@@ -1242,13 +1300,13 @@ fun ProfilePhotoPickerField(
                         colors = ButtonDefaults.buttonColors(containerColor = accentColor)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Crop,
+                            imageVector = Icons.Default.ZoomIn,
                             contentDescription = null,
                             modifier = Modifier.size(15.dp),
                             tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Adjust Photo", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(text = "Full Zoom View", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1257,9 +1315,6 @@ fun ProfilePhotoPickerField(
                         onClick = {
                             onPhotoSelected(null)
                             photoZoom = 1f
-                            photoRotation = 0f
-                            photoPanX = 0f
-                            photoPanY = 0f
                         },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
@@ -1281,17 +1336,11 @@ fun ProfilePhotoPickerField(
 fun AdjustPhotoDialog(
     photoUri: String,
     currentZoom: Float,
-    currentRotation: Float,
-    currentPanX: Float,
-    currentPanY: Float,
     accentColor: Color,
-    onSave: (zoom: Float, rotation: Float, panX: Float, panY: Float) -> Unit,
+    onSave: (zoom: Float) -> Unit,
     onDismiss: () -> Unit
 ) {
     var tempZoom by remember { mutableFloatStateOf(currentZoom) }
-    var tempRotation by remember { mutableFloatStateOf(currentRotation) }
-    var tempPanX by remember { mutableFloatStateOf(currentPanX) }
-    var tempPanY by remember { mutableFloatStateOf(currentPanY) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -1299,13 +1348,13 @@ fun AdjustPhotoDialog(
                 .fillMaxWidth()
                 .padding(8.dp),
             shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Slate800),
-            border = BorderStroke(1.dp, Slate700)
+            colors = CardDefaults.cardColors(containerColor = WhiteCard),
+            border = BorderStroke(1.dp, CardBorderColor)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(18.dp),
+                    .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Header
@@ -1316,192 +1365,131 @@ fun AdjustPhotoDialog(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.Crop,
+                            imageVector = Icons.Default.ZoomIn,
                             contentDescription = null,
                             tint = accentColor,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Adjust Profile Photo",
+                            text = "Photo Zoom & Preview",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = TextDark
                         )
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = TextMuted)
                     }
                 }
 
                 Text(
-                    text = "Drag to reposition • Slide or pinch to zoom • Rotate",
+                    text = "Adjust Zoom In or Zoom Out. The full image remains completely intact.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = TextMuted,
                     fontSize = 11.sp,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 14.dp)
                 )
 
-                // Interactive Crop Viewport Box
+                // Full Unbroken Image Viewport
                 Box(
                     modifier = Modifier
-                        .size(210.dp)
+                        .size(220.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color.Black)
-                        .border(1.dp, Slate700, RoundedCornerShape(16.dp)),
+                        .background(GreenMintBackground)
+                        .border(1.5.dp, GreenBorder, RoundedCornerShape(16.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Circular cutout mask where the photo can be dragged & zoomed
-                    Box(
+                    AsyncImage(
+                        model = photoUri,
+                        contentDescription = "Full Profile Photo",
+                        contentScale = ContentScale.Fit, // Keeps full photo intact, never breaks into parts!
                         modifier = Modifier
-                            .size(180.dp)
-                            .clip(CircleShape)
-                            .background(Slate900)
-                            .border(2.5.dp, accentColor, CircleShape)
-                            .pointerInput(Unit) {
-                                detectTransformGestures { _, pan, zoomFactor, _ ->
-                                    tempPanX += pan.x
-                                    tempPanY += pan.y
-                                    tempZoom = (tempZoom * zoomFactor).coerceIn(0.8f, 3.5f)
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AsyncImage(
-                            model = photoUri,
-                            contentDescription = "Adjust Photo",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    scaleX = tempZoom
-                                    scaleY = tempZoom
-                                    rotationZ = tempRotation
-                                    translationX = tempPanX
-                                    translationY = tempPanY
-                                }
-                        )
-
-                        // Translucent center guide overlay for facial framing
-                        Box(
-                            modifier = Modifier
-                                .size(130.dp)
-                                .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
-                        )
-                    }
+                            .fillMaxSize()
+                            .padding(8.dp)
+                            .graphicsLayer {
+                                scaleX = tempZoom
+                                scaleY = tempZoom
+                            }
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Zoom Slider
+                // Zoom Slider & Controls
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = { tempZoom = (tempZoom - 0.15f).coerceAtLeast(0.8f) },
-                        modifier = Modifier.size(32.dp)
+                        onClick = { tempZoom = (tempZoom - 0.15f).coerceAtLeast(0.5f) },
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        Icon(Icons.Default.ZoomOut, contentDescription = "Zoom Out", tint = Color.White, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.ZoomOut, contentDescription = "Zoom Out", tint = TextDark, modifier = Modifier.size(20.dp))
                     }
 
                     Slider(
                         value = tempZoom,
                         onValueChange = { tempZoom = it },
-                        valueRange = 0.8f..3.5f,
+                        valueRange = 0.5f..3.0f,
                         modifier = Modifier.weight(1f),
                         colors = SliderDefaults.colors(
                             thumbColor = accentColor,
                             activeTrackColor = accentColor,
-                            inactiveTrackColor = Slate700
+                            inactiveTrackColor = CardBorderColor
                         )
                     )
 
                     IconButton(
-                        onClick = { tempZoom = (tempZoom + 0.15f).coerceAtMost(3.5f) },
-                        modifier = Modifier.size(32.dp)
+                        onClick = { tempZoom = (tempZoom + 0.15f).coerceAtMost(3.0f) },
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        Icon(Icons.Default.ZoomIn, contentDescription = "Zoom In", tint = Color.White, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.ZoomIn, contentDescription = "Zoom In", tint = TextDark, modifier = Modifier.size(20.dp))
                     }
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "${(tempZoom * 100).toInt()}%",
-                        color = Color.White,
-                        fontSize = 11.sp,
+                        color = TextDark,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.width(38.dp)
+                        modifier = Modifier.width(42.dp)
                     )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Rotation and Reset buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedButton(
-                        onClick = { tempRotation = (tempRotation + 90f) % 360f },
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, Slate700),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Icon(Icons.Default.RotateRight, contentDescription = null, modifier = Modifier.size(16.dp), tint = accentColor)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Rotate 90°", fontSize = 11.sp, color = Color.White)
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            tempZoom = 1.0f
-                            tempRotation = 0f
-                            tempPanX = 0f
-                            tempPanY = 0f
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, Slate700),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Reset", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Bottom Buttons (Cancel & Apply)
+                // Bottom Buttons (Reset, Done)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onDismiss,
+                        onClick = { tempZoom = 1.0f },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        border = BorderStroke(1.dp, Slate700)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextDark),
+                        border = BorderStroke(1.dp, CardBorderColor)
                     ) {
-                        Text("Cancel", fontSize = 13.sp)
+                        Text("Reset (100%)", fontSize = 12.sp, color = TextDark)
                     }
 
                     Button(
-                        onClick = { onSave(tempZoom, tempRotation, tempPanX, tempPanY) },
+                        onClick = { onSave(tempZoom) },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = accentColor)
                     ) {
                         Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Save Photo", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Done", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
         }
     }
 }
+
 

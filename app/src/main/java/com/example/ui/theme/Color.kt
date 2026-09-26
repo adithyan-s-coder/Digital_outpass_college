@@ -15,7 +15,7 @@ val WhitePure = Color(0xFFFFFFFF)            // Pure clean White
 val WhiteBackground = Color(0xFFF9FAF9)      // Ultra-clean crisp modern white background
 val WhiteCard = Color(0xFFFFFFFF)            // Pure White Card surface
 val CardBorderColor = Color(0xFFE2EBE5)      // Crisp soft border
-val TextDark = Color(0xFF0F172A)             // Deep slate text for clear readability
+val TextDark = Color(0xFF000000)             // Pure black text for clear readability
 val TextMuted = Color(0xFF475569)            // Subtitle text
 
 // Mappings for existing component tokens to adopt the White & Green theme seamlessly:
