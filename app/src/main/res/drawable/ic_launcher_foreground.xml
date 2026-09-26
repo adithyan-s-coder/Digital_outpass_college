@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Gold Metallic Shield Rim -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M30,22 C30,22 54,16 54,16 C54,16 78,22 78,22 C78,54 78,72 54,92 C30,72 30,54 30,22 Z" />
+    
+    <!-- Inner Deep Indigo Shield Body -->
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M34,25 C34,25 54,20 54,20 C54,20 74,25 74,25 C74,52 74,68 54,86 C34,68 34,52 34,25 Z" />
+        
+    <!-- Emerald Core Safety Layer -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M54,24 L69,29 C69,50 69,60 54,76 C39,60 39,50 39,29 L54,24 Z" />
+
+    <!-- Pure White Central Gate Security Crown / Key -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,34 L59,44 L70,44 L61,50 L65,60 L54,54 L43,60 L47,50 L38,44 L49,44 Z" />
+        
+    <!-- Center Pass Check mark -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M51,49 L47,45 L49,43 L51,45 L57,39 L59,41 Z" />
+</vector>
