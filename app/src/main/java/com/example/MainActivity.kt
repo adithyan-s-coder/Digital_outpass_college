@@ -104,6 +104,7 @@ fun MainApp(
     val activeOutsideStudents by viewModel.activeOutsideStudents.collectAsState()
     val gateSearchResults by viewModel.gateSearchResults.collectAsState()
     val allOutpasses by viewModel.allOutpasses.collectAsState()
+    val filteredAllOutpasses by viewModel.filteredAllOutpasses.collectAsState()
     val allGateLogs by viewModel.allGateLogs.collectAsState()
     val allUsers by viewModel.allUsers.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -238,7 +239,7 @@ fun MainApp(
                                         onDismissAiReport = { viewModel.dismissAiReport() }
                                     )
                                     1 -> PassHistoryScreen(
-                                        outpasses = allOutpasses,
+                                        outpasses = filteredAllOutpasses,
                                         selectedFilter = statusFilter,
                                         onFilterSelect = { viewModel.setStatusFilter(it) },
                                         currentUser = currentUser,
@@ -268,9 +269,10 @@ fun MainApp(
                                         onCheckIn = { viewModel.gateCheckIn(it) }
                                     )
                                     2 -> PassHistoryScreen(
-                                        outpasses = allOutpasses,
+                                        outpasses = filteredAllOutpasses,
                                         selectedFilter = statusFilter,
-                                        onFilterSelect = { viewModel.setStatusFilter(it) }
+                                        onFilterSelect = { viewModel.setStatusFilter(it) },
+                                        currentUser = currentUser
                                     )
                                 }
                             }

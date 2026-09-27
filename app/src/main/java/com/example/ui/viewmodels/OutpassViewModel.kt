@@ -104,6 +104,15 @@ class OutpassViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // All outpasses filtered by active status filter (for Security Officer and Staff/HOD audit screens)
+    val filteredAllOutpasses: StateFlow<List<Outpass>> = combine(
+        allOutpasses,
+        statusFilter
+    ) { passes, filter ->
+        if (filter == null) passes
+        else passes.filter { it.status == filter }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
     }

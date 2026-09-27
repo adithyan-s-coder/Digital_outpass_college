@@ -1,7 +1,6 @@
 package com.example.ui.components
 
 import android.content.Intent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import android.net.Uri
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -33,14 +31,10 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -54,10 +48,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,7 +57,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -78,12 +69,19 @@ import com.example.data.models.Outpass
 import com.example.data.models.ReportDatePreset
 import com.example.data.models.User
 import com.example.data.models.UserRole
+import com.example.ui.theme.AmberContainer
+import com.example.ui.theme.AmberWarning
+import com.example.ui.theme.CardBorderColor
+import com.example.ui.theme.CrimsonContainer
 import com.example.ui.theme.CrimsonError
+import com.example.ui.theme.EmeraldContainer
 import com.example.ui.theme.EmeraldSuccess
-import com.example.ui.theme.IndigoPrimary
-import com.example.ui.theme.Slate700
-import com.example.ui.theme.Slate800
-import com.example.ui.theme.Slate900
+import com.example.ui.theme.GreenContainer
+import com.example.ui.theme.GreenDark
+import com.example.ui.theme.GreenPrimary
+import com.example.ui.theme.TextDark
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.WhiteCard
 import com.example.util.OutpassStatisticsCalculator
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -134,11 +132,12 @@ fun AiReportModal(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val dateTimeDf = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
-    val dateOnlyDf = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    val dateTimeDf = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
+    val dateOnlyDf = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
 
     var selectedPreset by remember { mutableStateOf(ReportDatePreset.THIS_WEEK) }
     var customDaysBack by remember { mutableStateOf(7) }
+    var userWantsReanalyze by remember { mutableStateOf(false) }
 
     val nowMs = System.currentTimeMillis()
     val customStartMs = nowMs - (customDaysBack * 86400_000L)
@@ -163,10 +162,10 @@ fun AiReportModal(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .fillMaxHeight(0.92f)
-                .padding(vertical = 16.dp),
+                .padding(vertical = 12.dp),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Slate900),
-            border = BorderStroke(1.5.dp, Color(0xFFF59E0B).copy(alpha = 0.5f))
+            colors = CardDefaults.cardColors(containerColor = WhiteCard),
+            border = BorderStroke(1.5.dp, CardBorderColor)
         ) {
             Column(
                 modifier = Modifier
@@ -179,76 +178,93 @@ fun AiReportModal(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFD97706).copy(alpha = 0.2f)),
+                                .background(GreenContainer)
+                                .border(1.dp, GreenPrimary, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = null,
-                                tint = Color(0xFFFCD34D),
-                                modifier = Modifier.size(20.dp)
+                                tint = GreenDark,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
                                 text = "AI-POWERED OUTPASS REPORT",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = TextDark
                             )
                             Text(
                                 text = "${currentUser.role.displayName} • ${currentUser.department}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFFCD34D),
-                                fontSize = 11.sp
+                                fontWeight = FontWeight.SemiBold,
+                                color = GreenDark,
+                                fontSize = 12.sp
                             )
                         }
                     }
 
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = TextDark
+                        )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                if (currentReport == null) {
+                if (currentReport == null || userWantsReanalyze) {
                     // STEP 1: DATE RANGE SELECTION & GENERATION TRIGGER
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         item {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Slate800),
-                                border = BorderStroke(1.dp, Slate700)
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                border = BorderStroke(1.dp, CardBorderColor)
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.DateRange, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(18.dp))
+                                        Icon(
+                                            Icons.Default.DateRange,
+                                            contentDescription = null,
+                                            tint = GreenDark,
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = "Select Report Date Range",
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White
+                                            color = TextDark
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = "Only database records within the chosen period will be analyzed.",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = TextMuted,
                                         fontSize = 11.sp
                                     )
 
@@ -264,29 +280,34 @@ fun AiReportModal(
                                             FilterChip(
                                                 selected = isSelected,
                                                 onClick = { selectedPreset = preset },
-                                                label = { Text(preset.displayName, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                                label = {
+                                                    Text(
+                                                        preset.displayName,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                    )
+                                                },
                                                 colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = IndigoPrimary,
+                                                    selectedContainerColor = GreenPrimary,
                                                     selectedLabelColor = Color.White,
-                                                    containerColor = Slate900,
-                                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    containerColor = WhiteCard,
+                                                    labelColor = TextDark
                                                 ),
                                                 border = FilterChipDefaults.filterChipBorder(
                                                     enabled = true,
                                                     selected = isSelected,
-                                                    borderColor = Slate700,
-                                                    selectedBorderColor = IndigoPrimary
+                                                    borderColor = CardBorderColor,
+                                                    selectedBorderColor = GreenPrimary
                                                 )
                                             )
                                         }
                                     }
 
                                     if (selectedPreset == ReportDatePreset.CUSTOM) {
-                                        Spacer(modifier = Modifier.height(14.dp))
+                                        Spacer(modifier = Modifier.height(12.dp))
                                         Card(
                                             shape = RoundedCornerShape(12.dp),
-                                            colors = CardDefaults.cardColors(containerColor = Slate900),
-                                            border = BorderStroke(1.dp, IndigoPrimary.copy(alpha = 0.4f)),
+                                            colors = CardDefaults.cardColors(containerColor = WhiteCard),
+                                            border = BorderStroke(1.dp, GreenPrimary.copy(alpha = 0.5f)),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Column(modifier = Modifier.padding(12.dp)) {
@@ -294,12 +315,13 @@ fun AiReportModal(
                                                     text = "Custom Range: Past $customDaysBack Days",
                                                     style = MaterialTheme.typography.labelMedium,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color.White
+                                                    color = TextDark
                                                 )
                                                 Text(
                                                     text = "${dateOnlyDf.format(Date(customStartMs))} to ${dateOnlyDf.format(Date(customEndMs))}",
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = Color(0xFFFCD34D),
+                                                    color = GreenDark,
+                                                    fontWeight = FontWeight.SemiBold,
                                                     fontSize = 11.sp
                                                 )
                                                 Spacer(modifier = Modifier.height(8.dp))
@@ -312,7 +334,7 @@ fun AiReportModal(
                                                         Box(
                                                             modifier = Modifier
                                                                 .clip(RoundedCornerShape(8.dp))
-                                                                .background(if (sel) IndigoPrimary else Slate800)
+                                                                .background(if (sel) GreenPrimary else Color(0xFFF1F5F9))
                                                                 .clickable { customDaysBack = days }
                                                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                                                         ) {
@@ -320,7 +342,7 @@ fun AiReportModal(
                                                                 text = "${days}d",
                                                                 fontSize = 11.sp,
                                                                 fontWeight = FontWeight.Bold,
-                                                                color = if (sel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                                                color = if (sel) Color.White else TextDark
                                                             )
                                                         }
                                                     }
@@ -337,8 +359,8 @@ fun AiReportModal(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(containerColor = Slate800.copy(alpha = 0.6f)),
-                                border = BorderStroke(1.dp, Slate700)
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                border = BorderStroke(1.dp, CardBorderColor)
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -347,30 +369,30 @@ fun AiReportModal(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column {
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = "Matching Outpass Records Found",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = TextMuted
                                         )
                                         Text(
                                             text = "$previewCount records in ${currentUser.department}",
-                                            style = MaterialTheme.typography.titleMedium,
+                                            style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White
+                                            color = TextDark
                                         )
                                     }
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(if (previewCount > 0) EmeraldSuccess.copy(alpha = 0.2f) else Slate700)
+                                            .background(if (previewCount > 0) GreenContainer else Color(0xFFF1F5F9))
                                             .padding(horizontal = 10.dp, vertical = 6.dp)
                                     ) {
                                         Text(
                                             text = if (previewCount > 0) "Ready to Analyze" else "No Records",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (previewCount > 0) EmeraldSuccess else Color.LightGray
+                                            color = if (previewCount > 0) GreenDark else TextMuted
                                         )
                                     }
                                 }
@@ -382,24 +404,25 @@ fun AiReportModal(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(10.dp),
-                                    colors = CardDefaults.cardColors(containerColor = CrimsonError.copy(alpha = 0.2f)),
+                                    colors = CardDefaults.cardColors(containerColor = CrimsonContainer),
                                     border = BorderStroke(1.dp, CrimsonError)
                                 ) {
                                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = CrimsonError)
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text(text = errorMessage, color = Color.White, fontSize = 12.sp)
+                                        Text(text = errorMessage, color = CrimsonError, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     // Generate Button with loading indicator
                     Button(
                         onClick = {
+                            userWantsReanalyze = false
                             val start = if (selectedPreset == ReportDatePreset.CUSTOM) customStartMs else null
                             val end = if (selectedPreset == ReportDatePreset.CUSTOM) customEndMs else null
                             onGenerate(selectedPreset, start, end)
@@ -407,10 +430,11 @@ fun AiReportModal(
                         enabled = !isGenerating,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp),
+                            .height(50.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFD97706),
-                            disabledContainerColor = Slate800
+                            containerColor = GreenPrimary,
+                            contentColor = Color.White,
+                            disabledContainerColor = Color(0xFF94A3B8)
                         ),
                         shape = RoundedCornerShape(14.dp)
                     ) {
@@ -422,7 +446,7 @@ fun AiReportModal(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Calculating Statistics & Analyzing with Gemini AI...",
+                                text = "Analyzing Records with Gemini AI...",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
@@ -449,13 +473,13 @@ fun AiReportModal(
                             .fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        // Report Meta Header
+                        // Report Meta Header Card
                         item {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Slate800),
-                                border = BorderStroke(1.dp, Slate700)
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                border = BorderStroke(1.dp, CardBorderColor)
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Row(
@@ -463,37 +487,44 @@ fun AiReportModal(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Column {
+                                        Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 text = "REPORT PERIOD",
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                fontSize = 10.sp
+                                                color = TextMuted,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
                                             )
+                                            Spacer(modifier = Modifier.height(2.dp))
                                             Text(
                                                 text = stats.periodLabel,
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color.White
+                                                color = TextDark
                                             )
                                         }
 
+                                        Spacer(modifier = Modifier.width(8.dp))
+
+                                        // Badge without vertical squishing
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(8.dp))
-                                                .background(if (analysis.isAiGenerated) Color(0xFFD97706) else Slate700)
-                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                .background(if (analysis.isAiGenerated) GreenContainer else Color(0xFFE2E8F0))
+                                                .padding(horizontal = 10.dp, vertical = 5.dp)
                                         ) {
                                             Text(
-                                                text = if (analysis.isAiGenerated) "Gemini 3.5 Flash" else "Calculated Audit",
-                                                color = Color.White,
+                                                text = if (analysis.isAiGenerated) "Gemini AI" else "Calculated Audit",
+                                                color = if (analysis.isAiGenerated) GreenDark else TextDark,
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 10.sp
+                                                fontSize = 11.sp,
+                                                maxLines = 1,
+                                                softWrap = false
                                             )
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
 
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -502,14 +533,14 @@ fun AiReportModal(
                                         Text(
                                             text = "Generated: ${dateTimeDf.format(Date(currentReport.generatedAt))}",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            color = TextMuted,
                                             fontSize = 11.sp
                                         )
                                         Text(
                                             text = "Dept: ${stats.department}",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFFFCD34D),
-                                            fontWeight = FontWeight.SemiBold,
+                                            color = GreenDark,
+                                            fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp
                                         )
                                     }
@@ -517,25 +548,26 @@ fun AiReportModal(
                             }
                         }
 
-                        // Fallback warning notice if Gemini API key not present or error
+                        // Fallback warning notice if needed
                         if (analysis.fallbackWarning != null) {
                             item {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF78350F).copy(alpha = 0.4f)),
-                                    border = BorderStroke(1.dp, Color(0xFFF59E0B))
+                                    colors = CardDefaults.cardColors(containerColor = AmberContainer),
+                                    border = BorderStroke(1.dp, AmberWarning)
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(12.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFCD34D), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Warning, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = analysis.fallbackWarning,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFFFCD34D),
+                                            color = AmberWarning,
+                                            fontWeight = FontWeight.SemiBold,
                                             fontSize = 11.sp
                                         )
                                     }
@@ -547,21 +579,21 @@ fun AiReportModal(
                         item {
                             Text(
                                 text = "CALCULATED DATABASE STATISTICS",
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = TextMuted,
                                 fontSize = 11.sp
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                MetricPill(title = "Total", value = "${stats.totalRequests}", color = IndigoPrimary, modifier = Modifier.weight(1f))
+                                MetricPill(title = "Total", value = "${stats.totalRequests}", color = GreenPrimary, modifier = Modifier.weight(1f))
                                 MetricPill(title = "Approved", value = "${stats.approvedCount}", color = EmeraldSuccess, modifier = Modifier.weight(1f))
                                 MetricPill(title = "Rejected", value = "${stats.rejectedCount}", color = CrimsonError, modifier = Modifier.weight(1f))
-                                MetricPill(title = "Pending", value = "${stats.pendingCount}", color = Color(0xFFF59E0B), modifier = Modifier.weight(1f))
-                                MetricPill(title = "Late Returns", value = "${stats.lateReturnsCount}", color = if (stats.lateReturnsCount > 0) CrimsonError else EmeraldSuccess, modifier = Modifier.weight(1f))
+                                MetricPill(title = "Pending", value = "${stats.pendingCount}", color = AmberWarning, modifier = Modifier.weight(1f))
+                                MetricPill(title = "Late", value = "${stats.lateReturnsCount}", color = if (stats.lateReturnsCount > 0) CrimsonError else EmeraldSuccess, modifier = Modifier.weight(1f))
                             }
                         }
 
@@ -570,38 +602,40 @@ fun AiReportModal(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(containerColor = Slate800),
-                                border = BorderStroke(1.dp, Slate700)
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                border = BorderStroke(1.dp, CardBorderColor)
                             ) {
                                 Column(modifier = Modifier.padding(14.dp)) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.AccessTime, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.AccessTime, contentDescription = null, tint = GreenDark, modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Peak Departure Window:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                                            Text("Peak Departure Window:", style = MaterialTheme.typography.bodySmall, color = TextMuted, fontSize = 11.sp)
                                         }
-                                        Text(stats.peakExitHours, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 11.sp)
+                                        Text(stats.peakExitHours, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = TextDark, fontSize = 11.sp)
                                     }
 
                                     Spacer(modifier = Modifier.height(8.dp))
 
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(Icons.Default.HourglassTop, contentDescription = null, tint = EmeraldSuccess, modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Avg Approval Duration:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                                            Text("Avg Approval Duration:", style = MaterialTheme.typography.bodySmall, color = TextMuted, fontSize = 11.sp)
                                         }
                                         Text(
                                             text = if (stats.averageApprovalTimeMinutes != null) "${stats.averageApprovalTimeMinutes} mins" else "N/A",
                                             style = MaterialTheme.typography.bodySmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color.White,
+                                            color = TextDark,
                                             fontSize = 11.sp
                                         )
                                     }
@@ -610,18 +644,19 @@ fun AiReportModal(
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(Icons.AutoMirrored.Filled.DirectionsWalk, contentDescription = null, tint = Color(0xFFFCD34D), modifier = Modifier.size(16.dp))
+                                                Icon(Icons.AutoMirrored.Filled.DirectionsWalk, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(6.dp))
-                                                Text("Primary Reason:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                                                Text("Primary Reason:", style = MaterialTheme.typography.bodySmall, color = TextMuted, fontSize = 11.sp)
                                             }
                                             Text(
                                                 text = "${stats.topReasons.first().first} (${stats.topReasons.first().second})",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color.White,
+                                                color = TextDark,
                                                 fontSize = 11.sp
                                             )
                                         }
@@ -635,25 +670,25 @@ fun AiReportModal(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Slate800),
-                                border = BorderStroke(1.dp, Color(0xFFD97706).copy(alpha = 0.5f))
+                                colors = CardDefaults.cardColors(containerColor = WhiteCard),
+                                border = BorderStroke(1.5.dp, GreenPrimary.copy(alpha = 0.4f))
                             ) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Psychology, contentDescription = null, tint = Color(0xFFFCD34D), modifier = Modifier.size(20.dp))
+                                        Icon(Icons.Default.Psychology, contentDescription = null, tint = GreenDark, modifier = Modifier.size(20.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "AI SUMMARY",
+                                            text = "EXECUTIVE SUMMARY",
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFFFCD34D)
+                                            color = GreenDark
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = analysis.executiveSummary,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Color.White,
+                                        color = TextDark,
                                         lineHeight = 20.sp
                                     )
                                 }
@@ -666,8 +701,8 @@ fun AiReportModal(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Slate800),
-                                    border = BorderStroke(1.dp, Slate700)
+                                    colors = CardDefaults.cardColors(containerColor = WhiteCard),
+                                    border = BorderStroke(1.dp, CardBorderColor)
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -677,14 +712,14 @@ fun AiReportModal(
                                                 text = "KEY OBSERVATIONS",
                                                 style = MaterialTheme.typography.titleSmall,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color.White
+                                                color = TextDark
                                             )
                                         }
                                         Spacer(modifier = Modifier.height(10.dp))
                                         analysis.keyObservations.forEach { obs ->
                                             Row(modifier = Modifier.padding(vertical = 4.dp)) {
-                                                Text("• ", color = EmeraldSuccess, fontWeight = FontWeight.Bold)
-                                                Text(obs, style = MaterialTheme.typography.bodySmall, color = Color.White)
+                                                Text("• ", color = EmeraldSuccess, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                                Text(obs, style = MaterialTheme.typography.bodySmall, color = TextDark, lineHeight = 18.sp)
                                             }
                                         }
                                     }
@@ -698,25 +733,25 @@ fun AiReportModal(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Slate800),
-                                    border = BorderStroke(1.dp, Slate700)
+                                    colors = CardDefaults.cardColors(containerColor = WhiteCard),
+                                    border = BorderStroke(1.dp, CardBorderColor)
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(18.dp))
+                                            Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = GreenDark, modifier = Modifier.size(18.dp))
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text(
                                                 text = "IMPORTANT TRENDS",
                                                 style = MaterialTheme.typography.titleSmall,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color.White
+                                                color = TextDark
                                             )
                                         }
                                         Spacer(modifier = Modifier.height(10.dp))
                                         analysis.importantTrends.forEach { trend ->
                                             Row(modifier = Modifier.padding(vertical = 4.dp)) {
-                                                Text("• ", color = IndigoPrimary, fontWeight = FontWeight.Bold)
-                                                Text(trend, style = MaterialTheme.typography.bodySmall, color = Color.White)
+                                                Text("• ", color = GreenDark, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                                Text(trend, style = MaterialTheme.typography.bodySmall, color = TextDark, lineHeight = 18.sp)
                                             }
                                         }
                                     }
@@ -730,25 +765,25 @@ fun AiReportModal(
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Slate800),
-                                    border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f))
+                                    colors = CardDefaults.cardColors(containerColor = WhiteCard),
+                                    border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.4f))
                                 ) {
                                     Column(modifier = Modifier.padding(16.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Lightbulb, contentDescription = null, tint = Color(0xFFFCD34D), modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Default.Lightbulb, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(18.dp))
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text(
                                                 text = "ADMINISTRATIVE INSIGHTS",
                                                 style = MaterialTheme.typography.titleSmall,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFFFCD34D)
+                                                color = AmberWarning
                                             )
                                         }
                                         Spacer(modifier = Modifier.height(10.dp))
                                         analysis.administrativeInsights.forEach { insight ->
                                             Row(modifier = Modifier.padding(vertical = 4.dp)) {
-                                                Text("• ", color = Color(0xFFFCD34D), fontWeight = FontWeight.Bold)
-                                                Text(insight, style = MaterialTheme.typography.bodySmall, color = Color.White)
+                                                Text("• ", color = AmberWarning, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                                Text(insight, style = MaterialTheme.typography.bodySmall, color = TextDark, lineHeight = 18.sp)
                                             }
                                         }
                                     }
@@ -766,16 +801,15 @@ fun AiReportModal(
                     ) {
                         OutlinedButton(
                             onClick = {
-                                // Allow user to switch back to date selection
-                                onGenerate(selectedPreset, customStartMs, customEndMs)
+                                userWantsReanalyze = true
                             },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, Slate700)
+                            border = BorderStroke(1.dp, CardBorderColor)
                         ) {
-                            Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = TextDark, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Re-analyze", fontSize = 12.sp)
+                            Text("Re-analyze", fontSize = 12.sp, color = TextDark, fontWeight = FontWeight.SemiBold)
                         }
 
                         Button(
@@ -789,8 +823,11 @@ fun AiReportModal(
                                     appendLine("AI SUMMARY:")
                                     appendLine(analysis.executiveSummary)
                                     appendLine()
-                                    appendLine("OBSERVATIONS:")
+                                    appendLine("KEY OBSERVATIONS:")
                                     analysis.keyObservations.forEach { appendLine("• $it") }
+                                    appendLine()
+                                    appendLine("ADMINISTRATIVE INSIGHTS:")
+                                    analysis.administrativeInsights.forEach { appendLine("• $it") }
                                 }
                                 val sendIntent = Intent().apply {
                                     action = Intent.ACTION_SEND
@@ -801,11 +838,11 @@ fun AiReportModal(
                             },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = IndigoPrimary)
+                            colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary)
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Share Summary", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Share Summary", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
@@ -824,13 +861,13 @@ private fun MetricPill(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Slate800),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.4f))
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.35f))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 10.dp, horizontal = 4.dp),
+                .padding(vertical = 10.dp, horizontal = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -843,9 +880,10 @@ private fun MetricPill(
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = TextDark,
                 fontSize = 9.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
             )
         }
     }

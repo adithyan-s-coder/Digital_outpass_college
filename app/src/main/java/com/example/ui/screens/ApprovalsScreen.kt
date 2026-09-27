@@ -137,8 +137,8 @@ fun ApprovalsScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 4:10 PM Automated HOD Daily Report Status Banner
-        if (currentUser != null && (currentUser.role == UserRole.HOD || currentUser.role == UserRole.STAFF_ADVISOR)) {
+        // 4:10 PM Automated HOD Daily Report Status Banner (Shown ONLY in Staff Advisor module per requirements)
+        if (currentUser != null && currentUser.role == UserRole.STAFF_ADVISOR) {
             val lastDispatchedInfo = DailyHodReportScheduler.getLastDispatchedInfo(context)
             HodAutomatedReportBadge(lastDispatchedInfo = lastDispatchedInfo)
             Spacer(modifier = Modifier.height(14.dp))

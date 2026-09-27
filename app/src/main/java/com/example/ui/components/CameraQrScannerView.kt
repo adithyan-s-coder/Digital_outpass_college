@@ -75,11 +75,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.example.ui.theme.CardBorderColor
 import com.example.ui.theme.EmeraldSuccess
-import com.example.ui.theme.IndigoPrimary
-import com.example.ui.theme.Slate700
-import com.example.ui.theme.Slate800
-import com.example.ui.theme.Slate900
+import com.example.ui.theme.GreenContainer
+import com.example.ui.theme.GreenDark
+import com.example.ui.theme.GreenPrimary
+import com.example.ui.theme.TextDark
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.WhiteCard
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
@@ -121,6 +124,104 @@ fun CameraQrScannerView(
     var activeCamera by remember { mutableStateOf<Camera?>(null) }
     var lastScannedCode by remember { mutableStateOf<String?>(null) }
 
+    var previewViewInstance by remember { mutableStateOf<PreviewView?>(null) }
+    var cameraProviderInstance by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+
+    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            cameraExecutor.shutdown()
+        }
+    }
+
+    // Initialize Camera Provider
+    LaunchedEffect(hasCameraPermission) {
+        if (hasCameraPermission) {
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+            cameraProviderFuture.addListener({
+                try {
+                    cameraProviderInstance = cameraProviderFuture.get()
+                } catch (_: Exception) {}
+            }, ContextCompat.getMainExecutor(context))
+        }
+    }
+
+    // Dynamic Camera Rebinding: Re-binds cleanly whenever front/back toggle, previewView, or provider changes
+    LaunchedEffect(useFrontCamera, previewViewInstance, cameraProviderInstance) {
+        val provider = cameraProviderInstance ?: return@LaunchedEffect
+        val pv = previewViewInstance ?: return@LaunchedEffect
+
+        val targetSelector = if (useFrontCamera) {
+            if (provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) {
+                CameraSelector.DEFAULT_FRONT_CAMERA
+            } else {
+                CameraSelector.DEFAULT_BACK_CAMERA
+            }
+        } else {
+            if (provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)) {
+                CameraSelector.DEFAULT_BACK_CAMERA
+            } else {
+                CameraSelector.DEFAULT_FRONT_CAMERA
+            }
+        }
+
+        val preview = Preview.Builder().build().also {
+            it.surfaceProvider = pv.surfaceProvider
+        }
+
+        val qrReader = MultiFormatReader().apply {
+            val hints = mapOf(
+                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                DecodeHintType.TRY_HARDER to true
+            )
+            setHints(hints)
+        }
+
+        val imageAnalysis = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+            .also { analysis ->
+                analysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                    processImageProxy(imageProxy, qrReader) { rawResult ->
+                        if (rawResult != lastScannedCode) {
+                            lastScannedCode = rawResult
+                            val cleanId = extractPassIdentifier(rawResult)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onScanSuccess(cleanId)
+                        }
+                    }
+                }
+            }
+
+        try {
+            provider.unbindAll()
+            activeCamera = provider.bindToLifecycle(
+                lifecycleOwner,
+                targetSelector,
+                preview,
+                imageAnalysis
+            )
+            if (useFrontCamera) {
+                isTorchEnabled = false
+            } else {
+                try {
+                    activeCamera?.cameraControl?.enableTorch(isTorchEnabled)
+                } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {
+            try {
+                provider.unbindAll()
+                activeCamera = provider.bindToLifecycle(
+                    lifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    imageAnalysis
+                )
+            } catch (_: Exception) {}
+        }
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "scanner_laser")
     val laserProgress by infiniteTransition.animateFloat(
         initialValue = 0.05f,
@@ -143,8 +244,8 @@ fun CameraQrScannerView(
                     .fillMaxWidth()
                     .height(240.dp),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Slate900),
-                border = BorderStroke(1.dp, Slate700)
+                colors = CardDefaults.cardColors(containerColor = WhiteCard),
+                border = BorderStroke(1.dp, CardBorderColor)
             ) {
                 Column(
                     modifier = Modifier
@@ -156,7 +257,7 @@ fun CameraQrScannerView(
                     Icon(
                         imageVector = Icons.Default.Videocam,
                         contentDescription = "Camera Permission",
-                        tint = IndigoPrimary,
+                        tint = GreenPrimary,
                         modifier = Modifier.size(48.dp)
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -164,22 +265,22 @@ fun CameraQrScannerView(
                         text = "Camera Permission Required",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = TextDark
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "To scan physical student QR passes at the security gate, please allow camera access.",
+                        text = "To scan student digital QR passes at the security gate, please allow camera access.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = TextMuted,
                         fontSize = 12.sp
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                        colors = ButtonDefaults.buttonColors(containerColor = IndigoPrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Grant Camera Access", fontWeight = FontWeight.Bold)
+                        Text("Grant Camera Access", fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
@@ -194,83 +295,27 @@ fun CameraQrScannerView(
                     .border(2.dp, EmeraldSuccess, RoundedCornerShape(16.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                // CameraX PreviewView
-                val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-
                 AndroidView(
                     factory = { ctx ->
-                        val previewView = PreviewView(ctx).apply {
+                        PreviewView(ctx).apply {
                             layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
                             )
                             scaleType = PreviewView.ScaleType.FILL_CENTER
+                            previewViewInstance = this
                         }
-
-                        val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                        cameraProviderFuture.addListener({
-                            val cameraProvider = cameraProviderFuture.get()
-
-                            val preview = Preview.Builder().build().also {
-                                it.surfaceProvider = previewView.surfaceProvider
-                            }
-
-                            val selector = if (useFrontCamera) {
-                                CameraSelector.DEFAULT_FRONT_CAMERA
-                            } else {
-                                CameraSelector.DEFAULT_BACK_CAMERA
-                            }
-
-                            val qrReader = MultiFormatReader().apply {
-                                val hints = mapOf(
-                                    DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
-                                    DecodeHintType.TRY_HARDER to true
-                                )
-                                setHints(hints)
-                            }
-
-                            val imageAnalysis = ImageAnalysis.Builder()
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                .build()
-                                .also { analysis ->
-                                    analysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                                        processImageProxy(imageProxy, qrReader) { rawResult ->
-                                            if (rawResult != lastScannedCode) {
-                                                lastScannedCode = rawResult
-                                                val cleanId = extractPassIdentifier(rawResult)
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                onScanSuccess(cleanId)
-                                            }
-                                        }
-                                    }
-                                }
-
-                            try {
-                                cameraProvider.unbindAll()
-                                activeCamera = cameraProvider.bindToLifecycle(
-                                    lifecycleOwner,
-                                    selector,
-                                    preview,
-                                    imageAnalysis
-                                )
-                            } catch (_: Exception) {
-                                // Camera binding failure handled gracefully
-                            }
-                        }, ContextCompat.getMainExecutor(ctx))
-
-                        previewView
                     },
                     modifier = Modifier.fillMaxSize(),
-                    update = {
-                        activeCamera?.cameraControl?.enableTorch(isTorchEnabled)
+                    update = { pv ->
+                        previewViewInstance = pv
+                        if (!useFrontCamera) {
+                            try {
+                                activeCamera?.cameraControl?.enableTorch(isTorchEnabled)
+                            } catch (_: Exception) {}
+                        }
                     }
                 )
-
-                DisposableEffect(Unit) {
-                    onDispose {
-                        cameraExecutor.shutdown()
-                    }
-                }
 
                 // Laser scan line overlay
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -288,7 +333,7 @@ fun CameraQrScannerView(
                     )
                 }
 
-                // Visual Reticle overlay & instructions
+                // Visual Reticle overlay & controls
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -296,7 +341,7 @@ fun CameraQrScannerView(
                     verticalArrangement = Arrangement.SpaceBetween,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Top controls bar (Torch & Camera Switch)
+                    // Top controls bar (Torch, Live Indicator, & Front/Back Camera Switch)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -304,9 +349,14 @@ fun CameraQrScannerView(
                     ) {
                         IconButton(
                             onClick = {
-                                isTorchEnabled = !isTorchEnabled
-                                activeCamera?.cameraControl?.enableTorch(isTorchEnabled)
+                                if (!useFrontCamera) {
+                                    isTorchEnabled = !isTorchEnabled
+                                    try {
+                                        activeCamera?.cameraControl?.enableTorch(isTorchEnabled)
+                                    } catch (_: Exception) {}
+                                }
                             },
+                            enabled = !useFrontCamera,
                             modifier = Modifier
                                 .size(36.dp)
                                 .background(Color.Black.copy(alpha = 0.5f), CircleShape)
@@ -322,14 +372,14 @@ fun CameraQrScannerView(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(Color.Black.copy(alpha = 0.6f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .background(Color.Black.copy(alpha = 0.65f))
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
                         ) {
                             Text(
-                                text = "LIVE CAMERA SCANNING",
+                                text = if (useFrontCamera) "FRONT CAMERA (SELFIE SCAN)" else "BACK CAMERA (MAIN GATE SCAN)",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = EmeraldSuccess
+                                color = if (useFrontCamera) Color(0xFF38BDF8) else EmeraldSuccess
                             )
                         }
 
@@ -337,11 +387,11 @@ fun CameraQrScannerView(
                             onClick = { useFrontCamera = !useFrontCamera },
                             modifier = Modifier
                                 .size(36.dp)
-                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                .background(if (useFrontCamera) GreenPrimary else Color.Black.copy(alpha = 0.5f), CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Cameraswitch,
-                                contentDescription = "Switch Camera",
+                                contentDescription = "Switch Camera Front/Back",
                                 tint = Color.White,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -368,10 +418,10 @@ fun CameraQrScannerView(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color.Black.copy(alpha = 0.7f))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "Align student outpass QR code in frame",
+                            text = if (useFrontCamera) "Hold QR code facing the front camera" else "Align student outpass QR code in frame",
                             style = MaterialTheme.typography.bodySmall,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
@@ -390,18 +440,18 @@ fun CameraQrScannerView(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Slate900),
-            border = BorderStroke(1.dp, Slate700)
+            colors = CardDefaults.cardColors(containerColor = WhiteCard),
+            border = BorderStroke(1.dp, CardBorderColor)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(10.dp)
+                    .padding(12.dp)
             ) {
                 Text(
-                    text = "QR Code ID / Generated Pass Number (Use if Camera Fails to Leave):",
+                    text = "QR Code ID / Pass Number (Manual Entry):",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFFFCD34D),
+                    color = GreenDark,
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp
                 )
@@ -414,12 +464,12 @@ fun CameraQrScannerView(
                     OutlinedTextField(
                         value = manualQrIdInput,
                         onValueChange = { manualQrIdInput = it },
-                        placeholder = { Text("Enter Pass ID (e.g. PASS-1001)", fontSize = 11.sp, color = Slate700) },
+                        placeholder = { Text("Enter Pass ID (e.g. PASS-1001)", fontSize = 11.sp, color = TextMuted) },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = IndigoPrimary,
-                            unfocusedBorderColor = Slate700,
+                            focusedBorderColor = GreenPrimary,
+                            unfocusedBorderColor = CardBorderColor,
                             focusedContainerColor = Color.White,
                             unfocusedContainerColor = Color.White,
                             focusedTextColor = Color.Black,
@@ -436,19 +486,19 @@ fun CameraQrScannerView(
                             }
                         },
                         enabled = manualQrIdInput.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(containerColor = IndigoPrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Verify & Leave", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Verify", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
 
                     OutlinedButton(
                         onClick = onCloseScanner,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextDark),
                         shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, Slate700)
+                        border = BorderStroke(1.dp, CardBorderColor)
                     ) {
-                        Text("Close", fontSize = 11.sp)
+                        Text("Close", fontSize = 11.sp, color = TextDark)
                     }
                 }
             }
@@ -469,11 +519,10 @@ private fun processImageProxy(
 
         val width = imageProxy.width
         val height = imageProxy.height
-        val rowStride = plane.rowStride
 
         val source = PlanarYUVLuminanceSource(
             bytes,
-            rowStride,
+            width,
             height,
             0,
             0,
@@ -481,38 +530,33 @@ private fun processImageProxy(
             height,
             false
         )
+
         val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
         val result = reader.decodeWithState(binaryBitmap)
-        if (!result.text.isNullOrBlank()) {
-            onResult(result.text)
-        }
+        result?.text?.let { onResult(it) }
     } catch (_: Exception) {
-        // Frame did not contain a readable QR code; continue
+        // Normal frame-by-frame non-match
     } finally {
+        reader.reset()
         imageProxy.close()
     }
 }
 
-/**
- * Extracts a valid Pass ID (e.g. PASS-1001), token, or registration number
- * from various QR code payloads (direct text, URI, or JSON payload).
- */
-private fun extractPassIdentifier(raw: String): String {
-    val trimmed = raw.trim()
-    // Look for PASS-XXXX pattern
-    val passRegex = Regex("""PASS-\d+""", RegexOption.IGNORE_CASE)
-    val match = passRegex.find(trimmed)
+private fun extractPassIdentifier(rawText: String): String {
+    val clean = rawText.trim()
+    val passRegex = Regex("""(PASS-\d{3,6})""", RegexOption.IGNORE_CASE)
+    val match = passRegex.find(clean)
     if (match != null) {
-        return match.value.uppercase()
+        return match.groupValues[1].uppercase()
     }
 
-    // Look for JSON or token key
-    if (trimmed.contains("passId", ignoreCase = true)) {
-        val jsonMatch = Regex(""""passId"\s*:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(trimmed)
+    if (clean.startsWith("{") && clean.endsWith("}")) {
+        val jsonIdRegex = Regex(""""id"\s*:\s*"([^"]+)"""")
+        val jsonMatch = jsonIdRegex.find(clean)
         if (jsonMatch != null) {
             return jsonMatch.groupValues[1]
         }
     }
 
-    return trimmed
+    return clean
 }
