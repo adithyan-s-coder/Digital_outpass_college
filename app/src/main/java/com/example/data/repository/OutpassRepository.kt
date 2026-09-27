@@ -373,17 +373,60 @@ class OutpassRepository {
         }
     }
 
-    fun login(query: String): Boolean {
+    fun login(query: String, passwordAttempt: String? = null): Boolean {
         val clean = query.trim()
         val user = _users.value.firstOrNull { 
             it.email.equals(clean, ignoreCase = true) || 
             it.regNo.equals(clean, ignoreCase = true) ||
             it.id.equals(clean, ignoreCase = true)
+        } ?: return false
+
+        if (!passwordAttempt.isNullOrBlank()) {
+            if (user.password.isNotBlank() && user.password != passwordAttempt) {
+                return false
+            }
         }
-        return if (user != null) {
-            _currentUser.value = user
-            true
-        } else false
+
+        _currentUser.value = user
+        return true
+    }
+
+    fun findUserByIdentifier(identifier: String): User? {
+        val clean = identifier.trim()
+        return _users.value.firstOrNull {
+            it.email.equals(clean, ignoreCase = true) ||
+            it.regNo.equals(clean, ignoreCase = true) ||
+            it.id.equals(clean, ignoreCase = true)
+        }
+    }
+
+    fun resetPassword(identifier: String, newPassword: String, newName: String? = null): Pair<Boolean, String> {
+        val clean = identifier.trim()
+        val list = _users.value.toMutableList()
+        val index = list.indexOfFirst {
+            it.email.equals(clean, ignoreCase = true) ||
+            it.regNo.equals(clean, ignoreCase = true) ||
+            it.id.equals(clean, ignoreCase = true)
+        }
+        if (index == -1) {
+            return Pair(false, "No account found matching '$identifier'. Please verify your Email or Roll No.")
+        }
+
+        val existingUser = list[index]
+        val updatedName = if (!newName.isNullOrBlank()) newName.trim() else existingUser.name
+        val updatedUser = existingUser.copy(
+            name = updatedName,
+            password = newPassword,
+            lastPasswordResetAt = System.currentTimeMillis()
+        )
+        list[index] = updatedUser
+        _users.value = list
+
+        if (_currentUser.value?.id == existingUser.id) {
+            _currentUser.value = updatedUser
+        }
+
+        return Pair(true, "Password updated successfully for ${updatedUser.name}!")
     }
 
     fun registerUser(user: User) {

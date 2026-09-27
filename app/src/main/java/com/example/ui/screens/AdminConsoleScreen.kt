@@ -54,12 +54,15 @@ import com.example.data.models.OutpassStatus
 import com.example.data.models.User
 import com.example.ui.components.RoleBadge
 import com.example.ui.components.StatusBadge
+import androidx.compose.foundation.clickable
+import com.example.ui.theme.CardBorderColor
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.IndigoPrimary
 import com.example.ui.theme.Slate700
 import com.example.ui.theme.Slate800
 import com.example.ui.theme.Slate900
 import com.example.ui.theme.TextDark
+import com.example.ui.theme.WhiteCard
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -240,11 +243,13 @@ private fun AdminPassCard(outpass: Outpass, df: SimpleDateFormat) {
 
 @Composable
 private fun UserDirectoryCard(user: User) {
+    var showPassword by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Slate700),
-        colors = CardDefaults.cardColors(containerColor = Slate800)
+        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderColor),
+        colors = CardDefaults.cardColors(containerColor = WhiteCard)
     ) {
         Row(
             modifier = Modifier
@@ -255,10 +260,10 @@ private fun UserDirectoryCard(user: User) {
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(42.dp)
                     .clip(CircleShape)
-                    .background(IndigoPrimary.copy(alpha = 0.2f))
-                    .border(1.dp, IndigoPrimary.copy(alpha = 0.4f), CircleShape),
+                    .background(IndigoPrimary.copy(alpha = 0.15f))
+                    .border(1.dp, IndigoPrimary.copy(alpha = 0.35f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (user.photoUri != null) {
@@ -273,7 +278,7 @@ private fun UserDirectoryCard(user: User) {
                         imageVector = Icons.Default.Person,
                         contentDescription = null,
                         tint = IndigoPrimary,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -281,10 +286,66 @@ private fun UserDirectoryCard(user: User) {
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = user.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextDark)
-                Text(text = "${user.email} • ${user.department}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                Text(
+                    text = user.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = TextDark
+                )
+                Text(
+                    text = "${user.email} • ${user.department}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp
+                )
                 if (user.regNo.isNotBlank()) {
-                    Text(text = "Code/Reg: ${user.regNo}", style = MaterialTheme.typography.labelSmall, color = IndigoPrimary, fontSize = 10.sp)
+                    Text(
+                        text = "ID/Reg: ${user.regNo}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = IndigoPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 10.sp
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = if (showPassword) "Pwd: ${user.password}" else "Pwd: ••••••••",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 10.sp
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (showPassword) "Hide" else "Show",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = IndigoPrimary,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(IndigoPrimary.copy(alpha = 0.1f))
+                            .clickable { showPassword = !showPassword }
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                    if (user.lastPasswordResetAt != null) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(EmeraldSuccess.copy(alpha = 0.15f))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "Password Updated",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldSuccess
+                            )
+                        }
+                    }
                 }
             }
             RoleBadge(role = user.role)

@@ -11,5 +11,7 @@ data class User(
     val roomNumber: String = "101",
     val phone: String = "+91 9876543210",
     val parentPhone: String = "+91 9123456789",
-    val photoUri: String? = null
+    val photoUri: String? = null,
+    val password: String = "Pass@1234",
+    val lastPasswordResetAt: Long? = null
 )

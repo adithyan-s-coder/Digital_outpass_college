@@ -164,7 +164,11 @@ fun MainApp(
                             viewModel.loginDemoRole(role)
                             currentBottomTab = 0
                         },
-                        onLoginEmail = { email -> viewModel.loginWithEmail(email) }
+                        onLoginEmail = { email, password -> viewModel.loginWithEmail(email, password) },
+                        onResetPassword = { identifier, newPassword, newName ->
+                            viewModel.resetPassword(identifier, newPassword, newName)
+                        },
+                        existingUsers = allUsers
                     )
                 }
 
