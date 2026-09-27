@@ -63,11 +63,13 @@ import com.example.ui.theme.IndigoPrimary
 import com.example.ui.theme.Slate800
 import com.example.ui.theme.Slate900
 import com.example.ui.viewmodels.OutpassViewModel
+import com.example.data.repository.OutpassRepository
 import androidx.compose.ui.platform.LocalContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        OutpassRepository.initialize(applicationContext)
         enableEdgeToEdge()
         setContent {
             var isDarkTheme by remember { mutableStateOf(false) } // Default to White & Green theme
@@ -164,7 +166,7 @@ fun MainApp(
                             viewModel.loginDemoRole(role)
                             currentBottomTab = 0
                         },
-                        onLoginEmail = { email, password -> viewModel.loginWithEmail(email, password) },
+                        onLoginEmail = { email, password, role -> viewModel.loginWithEmail(email, password, role) },
                         onResetPassword = { identifier, newPassword, newName ->
                             viewModel.resetPassword(identifier, newPassword, newName)
                         },
@@ -285,7 +287,9 @@ fun MainApp(
                                 AdminConsoleScreen(
                                     allOutpasses = allOutpasses,
                                     allGateLogs = allGateLogs,
-                                    allUsers = allUsers
+                                    allUsers = allUsers,
+                                    onUpdateUser = { viewModel.updateUser(it) },
+                                    onDeleteUser = { viewModel.deleteUser(it) }
                                 )
                             }
                         }

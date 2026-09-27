@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -92,7 +94,7 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onNavigateRegister: () -> Unit,
     onSelectDemoRole: (UserRole) -> Unit = {},
-    onLoginEmail: (String, String) -> Boolean,
+    onLoginEmail: (String, String, UserRole) -> Pair<Boolean, String>,
     onResetPassword: ((identifier: String, newPassword: String, newName: String?) -> Pair<Boolean, String>)? = null,
     existingUsers: List<User> = emptyList()
 ) {
@@ -149,16 +151,7 @@ fun LoginScreen(
                         .fillMaxWidth()
                         .padding(20.dp)
                 ) {
-                    Text(
-                        text = "Sign In",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextDark
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Small Dropdown for Role Selection
+                    // Dropdown for Role Selection
                     ExposedDropdownMenuBox(
                         expanded = roleDropdownExpanded,
                         onExpandedChange = { roleDropdownExpanded = !roleDropdownExpanded }
@@ -167,7 +160,7 @@ fun LoginScreen(
                             value = selectedRole.displayName,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Select Role") },
+                            label = { Text("Selected Role") },
                             leadingIcon = {
                                 val icon = when (selectedRole) {
                                     UserRole.STUDENT -> Icons.Default.School
@@ -183,7 +176,7 @@ fun LoginScreen(
                                 .menuAnchor()
                                 .fillMaxWidth(),
                             singleLine = true,
-                            textStyle = TextStyle(color = Color.Black, fontSize = 15.sp),
+                            textStyle = TextStyle(color = Color.Black, fontSize = 14.sp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = GreenPrimary,
                                 unfocusedBorderColor = CardBorderColor,
@@ -236,7 +229,7 @@ fun LoginScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     val isStudent = selectedRole == UserRole.STUDENT
                     val identifierLabel = if (isStudent) "Email / Roll No" else "Email Address"
@@ -365,11 +358,11 @@ fun LoginScreen(
                             } else if (passwordInput.isBlank()) {
                                 errorMessage = "Please enter your password."
                             } else {
-                                val success = onLoginEmail(emailInput, passwordInput)
+                                val (success, message) = onLoginEmail(emailInput, passwordInput, selectedRole)
                                 if (success) {
                                     onLoginSuccess()
                                 } else {
-                                    errorMessage = "Invalid credentials. Please verify your ID & Password or click 'Forgot Password?'."
+                                    errorMessage = message
                                 }
                             }
                         },
@@ -378,14 +371,14 @@ fun LoginScreen(
                             .height(50.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Sign In to ${selectedRole.displayName} Portal", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Sign In", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         Spacer(modifier = Modifier.width(8.dp))
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Registration Link
             Row(

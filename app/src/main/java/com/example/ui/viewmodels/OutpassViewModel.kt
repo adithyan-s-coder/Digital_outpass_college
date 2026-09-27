@@ -135,19 +135,22 @@ class OutpassViewModel(
         _userMessage.value = "Logged out successfully."
     }
 
-    fun loginWithEmail(email: String, password: String? = null): Boolean {
-        val success = repository.login(email, password)
+    fun loginWithEmail(email: String, password: String? = null, role: UserRole? = null): Pair<Boolean, String> {
+        val result = repository.login(email, password, role)
+        _userMessage.value = result.second
+        return Pair(result.first, result.second)
+    }
+
+    fun updateUser(user: User) {
+        repository.updateUser(user)
+        _userMessage.value = "User ${user.name} updated successfully."
+    }
+
+    fun deleteUser(userId: String) {
+        val success = repository.deleteUser(userId)
         if (success) {
-            _userMessage.value = "Welcome back, ${repository.currentUser.value?.name}!"
-        } else {
-            val userExists = repository.findUserByIdentifier(email) != null
-            if (userExists) {
-                _userMessage.value = "Incorrect password. If you forgot your password, please click 'Forgot Password?'."
-            } else {
-                _userMessage.value = "User with email/ID '$email' not found. Please register."
-            }
+            _userMessage.value = "User deleted successfully."
         }
-        return success
     }
 
     fun findUserByIdentifier(identifier: String): User? {

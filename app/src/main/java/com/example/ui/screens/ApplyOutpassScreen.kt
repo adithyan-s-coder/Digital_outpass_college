@@ -15,21 +15,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -48,16 +52,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.models.OutpassType
 import com.example.data.models.User
-import com.example.ui.theme.EmeraldSuccess
-import com.example.ui.theme.IndigoPrimary
-import com.example.ui.theme.Slate700
-import com.example.ui.theme.Slate800
-import com.example.ui.theme.Slate900
-import com.example.ui.theme.TextDark
-import com.example.ui.theme.GreenPrimary
-import com.example.ui.theme.GreenContainer
 import com.example.ui.components.GreenAnimatedButton
+import com.example.ui.theme.CardBorderColor
+import com.example.ui.theme.CrimsonError
+import com.example.ui.theme.EmeraldSuccess
+import com.example.ui.theme.GreenContainer
+import com.example.ui.theme.GreenDark
+import com.example.ui.theme.GreenPrimary
+import com.example.ui.theme.IndigoPrimary
+import com.example.ui.theme.TextDark
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.WhiteCard
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -67,18 +74,53 @@ fun ApplyOutpassScreen(
     onSubmitOutpass: (OutpassType, String, String, Long, Long) -> Unit,
     onNavigateBack: () -> Unit
 ) {
+    // Only 2 Outpass Types: Local Outpass and Home Outpass (Emergency Outpass removed)
     var selectedType by remember { mutableStateOf(OutpassType.LOCAL) }
     var destination by remember { mutableStateOf("") }
     var reason by remember { mutableStateOf("") }
-    var durationHours by remember { mutableStateOf(4) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    val nowMs = System.currentTimeMillis()
-    val hourMs = 3600_000L
-    val df = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+    val dfDateOnly = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+    val dfTimeOnly = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
 
-    val outTime = nowMs
-    val returnTime = nowMs + (durationHours * hourMs)
+    val now = remember { Calendar.getInstance() }
+    val initialDepDate = remember { dfDateOnly.format(now.time) }
+    val initialDepTime = remember { dfTimeOnly.format(now.time) }
+
+    // Initial arrival time: 4 hours later for local pass
+    val laterCalendar = remember {
+        Calendar.getInstance().apply {
+            add(Calendar.HOUR_OF_DAY, 4)
+        }
+    }
+    val initialArrDate = remember { dfDateOnly.format(laterCalendar.time) }
+    val initialArrTime = remember { dfTimeOnly.format(laterCalendar.time) }
+
+    // Direct Filling Departure & Arriving Time Fields
+    var departureDate by remember { mutableStateOf(initialDepDate) }
+    var departureTime by remember { mutableStateOf(initialDepTime) }
+
+    var arrivalDate by remember { mutableStateOf(initialArrDate) }
+    var arrivalTime by remember { mutableStateOf(initialArrTime) }
+
+    // Helper to calculate timestamp in ms from filled date and time
+    fun computeTimeMs(dateStr: String, timeStr: String, fallbackMs: Long): Long {
+        val formats = listOf(
+            SimpleDateFormat("dd MMM yyyy hh:mm a", Locale.getDefault()),
+            SimpleDateFormat("dd MMM yyyy HH:mm", Locale.getDefault()),
+            SimpleDateFormat("dd/MM/yyyy hh:mm a", Locale.getDefault()),
+            SimpleDateFormat("dd-MM-yyyy hh:mm a", Locale.getDefault()),
+            SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault())
+        )
+        val combined = "${dateStr.trim()} ${timeStr.trim()}"
+        for (fmt in formats) {
+            try {
+                val d = fmt.parse(combined)
+                if (d != null) return d.time
+            } catch (_: Exception) {}
+        }
+        return fallbackMs
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -87,76 +129,72 @@ fun ApplyOutpassScreen(
             .padding(16.dp)
     ) {
         item {
-            Text(
-                text = "Apply for Digital Outpass",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = TextDark
-            )
-
-            Text(
-                text = "Submit request for Staff Advisor & HOD approval",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                IconButton(onClick = onNavigateBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextDark)
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                Column {
+                    Text(
+                        text = "Apply for Digital Outpass",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark
+                    )
+                    Text(
+                        text = "Submit request for Staff Advisor & HOD approval",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Select Pass Type Cards
+            // 1. Select Outpass Type (Only Local and Home)
             Text(
                 text = "1. Select Outpass Type",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = IndigoPrimary
+                color = GreenDark
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutpassTypeCard(
-                    type = OutpassType.LOCAL,
+                OutpassOptionCard(
+                    title = "Local Outpass",
+                    subtitle = "Day outing, city/market visit",
+                    badge = "Same-Day Return",
+                    badgeColor = GreenPrimary,
+                    icon = Icons.Default.LocationCity,
                     selected = selectedType == OutpassType.LOCAL,
                     onSelect = {
                         selectedType = OutpassType.LOCAL
-                        durationHours = 4
+                        // Reset arrival date to same day
+                        arrivalDate = departureDate
                     },
                     modifier = Modifier.weight(1f)
                 )
-                OutpassTypeCard(
-                    type = OutpassType.HOME,
+
+                OutpassOptionCard(
+                    title = "Home Outpass",
+                    subtitle = "Weekend / family home leave",
+                    badge = "Multi-Day Leave",
+                    badgeColor = IndigoPrimary,
+                    icon = Icons.Default.Home,
                     selected = selectedType == OutpassType.HOME,
                     onSelect = {
                         selectedType = OutpassType.HOME
-                        durationHours = 48
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutpassTypeCard(
-                    type = OutpassType.EMERGENCY,
-                    selected = selectedType == OutpassType.EMERGENCY,
-                    onSelect = {
-                        selectedType = OutpassType.EMERGENCY
-                        durationHours = 12
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                OutpassTypeCard(
-                    type = OutpassType.SPECIAL_EVENT,
-                    selected = selectedType == OutpassType.SPECIAL_EVENT,
-                    onSelect = {
-                        selectedType = OutpassType.SPECIAL_EVENT
-                        durationHours = 24
+                        // Set arrival date to 2 days later
+                        val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 2) }
+                        arrivalDate = dfDateOnly.format(cal.time)
                     },
                     modifier = Modifier.weight(1f)
                 )
@@ -164,12 +202,12 @@ fun ApplyOutpassScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Outpass Details Form
+            // 2. Filling Departure Time and Arriving Time
             Text(
-                text = "2. Destination & Reason Details",
+                text = "2. Fill Departure Time & Arriving Time",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = IndigoPrimary
+                color = GreenDark
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -177,8 +215,254 @@ fun ApplyOutpassScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Slate700),
-                colors = CardDefaults.cardColors(containerColor = Slate800)
+                border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderColor),
+                colors = CardDefaults.cardColors(containerColor = WhiteCard)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    // DEPARTURE TIME FILLING
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(GreenContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Schedule, contentDescription = null, tint = GreenDark, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Departure Details (Out Time)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = TextDark
+                            )
+                            Text(
+                                text = "Fill the exact date & time you leave college",
+                                fontSize = 11.sp,
+                                color = TextMuted
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = departureDate,
+                            onValueChange = {
+                                departureDate = it
+                                errorMsg = null
+                            },
+                            label = { Text("Departure Date") },
+                            placeholder = { Text("e.g. 27 Sep 2026") },
+                            leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(16.dp)) },
+                            modifier = Modifier.weight(1.1f),
+                            colors = inputFieldColors(),
+                            singleLine = true
+                        )
+
+                        OutlinedTextField(
+                            value = departureTime,
+                            onValueChange = {
+                                departureTime = it
+                                errorMsg = null
+                            },
+                            label = { Text("Departure Time") },
+                            placeholder = { Text("e.g. 02:30 PM") },
+                            leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(16.dp)) },
+                            modifier = Modifier.weight(1f),
+                            colors = inputFieldColors(),
+                            singleLine = true
+                        )
+                    }
+
+                    // Quick-fill buttons for Departure
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        QuickFillChip(
+                            label = "Now",
+                            onClick = {
+                                val c = Calendar.getInstance()
+                                departureDate = dfDateOnly.format(c.time)
+                                departureTime = dfTimeOnly.format(c.time)
+                            }
+                        )
+                        QuickFillChip(
+                            label = "Today",
+                            onClick = {
+                                departureDate = dfDateOnly.format(Calendar.getInstance().time)
+                            }
+                        )
+                        QuickFillChip(
+                            label = "Tomorrow",
+                            onClick = {
+                                val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
+                                departureDate = dfDateOnly.format(c.time)
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(CardBorderColor))
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // ARRIVING TIME FILLING
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(IndigoPrimary.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Alarm, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Arriving Details (Return Time)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = TextDark
+                            )
+                            Text(
+                                text = "Fill the exact date & time you return to college",
+                                fontSize = 11.sp,
+                                color = TextMuted
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = arrivalDate,
+                            onValueChange = {
+                                arrivalDate = it
+                                errorMsg = null
+                            },
+                            label = { Text("Arriving Date") },
+                            placeholder = { Text("e.g. 27 Sep 2026") },
+                            leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(16.dp)) },
+                            modifier = Modifier.weight(1.1f),
+                            colors = inputFieldColors(),
+                            singleLine = true
+                        )
+
+                        OutlinedTextField(
+                            value = arrivalTime,
+                            onValueChange = {
+                                arrivalTime = it
+                                errorMsg = null
+                            },
+                            label = { Text("Arriving Time") },
+                            placeholder = { Text("e.g. 06:30 PM") },
+                            leadingIcon = { Icon(Icons.Default.Alarm, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(16.dp)) },
+                            modifier = Modifier.weight(1f),
+                            colors = inputFieldColors(),
+                            singleLine = true
+                        )
+                    }
+
+                    // Quick-fill buttons for Arrival
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        QuickFillChip(
+                            label = "Same Day",
+                            onClick = {
+                                arrivalDate = departureDate
+                            }
+                        )
+                        QuickFillChip(
+                            label = "Tomorrow",
+                            onClick = {
+                                val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
+                                arrivalDate = dfDateOnly.format(c.time)
+                            }
+                        )
+                        QuickFillChip(
+                            label = "In 2 Days",
+                            onClick = {
+                                val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 2) }
+                                arrivalDate = dfDateOnly.format(c.time)
+                            }
+                        )
+                        QuickFillChip(
+                            label = "06:30 PM",
+                            onClick = { arrivalTime = "06:30 PM" }
+                        )
+                        QuickFillChip(
+                            label = "08:00 PM",
+                            onClick = { arrivalTime = "08:00 PM" }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Filled Time Confirmation Box
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = GreenContainer.copy(alpha = 0.5f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GreenPrimary.copy(alpha = 0.3f))
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Departure: ", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = GreenDark)
+                                Text("$departureDate at $departureTime", fontSize = 12.sp, color = TextDark)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Arriving: ", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = IndigoPrimary)
+                                Text("$arrivalDate at $arrivalTime", fontSize = 12.sp, color = TextDark)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 3. Destination & Reason
+            Text(
+                text = "3. Destination & Purpose Details",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = GreenDark
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CardBorderColor),
+                colors = CardDefaults.cardColors(containerColor = WhiteCard)
             ) {
                 Column(
                     modifier = Modifier
@@ -192,10 +476,10 @@ fun ApplyOutpassScreen(
                             errorMsg = null
                         },
                         label = { Text("Destination / Place of Visit") },
-                        placeholder = { Text("e.g. Green Valley Market / Home") },
-                        leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = IndigoPrimary) },
+                        placeholder = { Text("e.g. City Market / Home") },
+                        leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = GreenPrimary) },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = fieldColors(),
+                        colors = inputFieldColors(),
                         singleLine = true
                     )
 
@@ -208,110 +492,41 @@ fun ApplyOutpassScreen(
                             errorMsg = null
                         },
                         label = { Text("Detailed Purpose / Reason") },
-                        placeholder = { Text("e.g. Buying lab stationery and course books") },
-                        leadingIcon = { Icon(Icons.Default.EditNote, contentDescription = null, tint = IndigoPrimary) },
+                        placeholder = { Text("e.g. Purchase study materials, family festival") },
+                        leadingIcon = { Icon(Icons.Default.EditNote, contentDescription = null, tint = GreenPrimary) },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = fieldColors(),
+                        colors = inputFieldColors(),
                         maxLines = 3
                     )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = "3. Duration Preset",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(3, 6, 12, 24, 48).forEach { hrs ->
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (durationHours == hrs) IndigoPrimary else Slate900)
-                                    .clickable { durationHours = hrs }
-                                    .padding(vertical = 10.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "${hrs}h",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (durationHours == hrs) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Date & Time Summary Card
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(12.dp)
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CalendarToday, contentDescription = null, tint = EmeraldSuccess, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Estimated Exit: ",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = df.format(Date(outTime)),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextDark
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Alarm, contentDescription = null, tint = EmeraldSuccess, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Expected Return: ",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = df.format(Date(returnTime)),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = EmeraldSuccess
-                                )
-                            }
-                        }
-                    }
 
                     if (errorMsg != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = errorMsg!!,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
+                            color = CrimsonError,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     GreenAnimatedButton(
                         onClick = {
+                            val nowMs = System.currentTimeMillis()
+                            val outMs = computeTimeMs(departureDate, departureTime, nowMs)
+                            val returnMs = computeTimeMs(arrivalDate, arrivalTime, nowMs + (4 * 3600_000L))
+
                             if (destination.isBlank() || reason.isBlank()) {
-                                errorMsg = "Please enter destination and reason."
+                                errorMsg = "Please enter both destination and purpose details."
+                            } else if (departureDate.isBlank() || departureTime.isBlank()) {
+                                errorMsg = "Please fill in the departure date and time."
+                            } else if (arrivalDate.isBlank() || arrivalTime.isBlank()) {
+                                errorMsg = "Please fill in the arriving date and time."
+                            } else if (returnMs <= outMs) {
+                                errorMsg = "Arriving time must be after the departure time. Please check the filled date and time."
                             } else {
-                                onSubmitOutpass(selectedType, destination, reason, outTime, returnTime)
+                                onSubmitOutpass(selectedType, destination.trim(), reason.trim(), outMs, returnMs)
                                 onNavigateBack()
                             }
                         },
@@ -320,67 +535,123 @@ fun ApplyOutpassScreen(
                             .height(50.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Send, contentDescription = null)
+                        Icon(imageVector = Icons.Default.Send, contentDescription = null, tint = Color.White)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Submit Outpass Application", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Submit Digital Outpass Request", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-private fun OutpassTypeCard(
-    type: OutpassType,
+private fun QuickFillChip(
+    label: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(GreenContainer)
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = GreenDark
+        )
+    }
+}
+
+@Composable
+private fun OutpassOptionCard(
+    title: String,
+    subtitle: String,
+    badge: String,
+    badgeColor: Color,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     selected: Boolean,
     onSelect: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier.clickable { onSelect() },
-        shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) GreenPrimary else Slate700),
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            if (selected) 2.dp else 1.dp,
+            if (selected) GreenPrimary else CardBorderColor
+        ),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) GreenPrimary else Color.White
+            containerColor = if (selected) GreenContainer.copy(alpha = 0.7f) else WhiteCard
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-        ) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = type.displayName,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = if (selected) Color.White else TextDark
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, contentDescription = null, tint = if (selected) GreenDark else TextMuted, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark
+                    )
+                }
                 if (selected) {
-                    Icon(imageVector = Icons.Default.Check, contentDescription = "Selected", tint = Color.White, modifier = Modifier.size(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clip(CircleShape)
+                            .background(GreenPrimary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                    }
                 }
             }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             Text(
-                text = "Max ${type.maxHours} hours",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (selected) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextMuted,
+                fontSize = 11.sp
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(badgeColor.copy(alpha = 0.15f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = badge,
+                    color = badgeColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = IndigoPrimary,
-    unfocusedBorderColor = Slate700,
+private fun inputFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = GreenPrimary,
+    unfocusedBorderColor = CardBorderColor,
     focusedContainerColor = Color.White,
     unfocusedContainerColor = Color.White,
     focusedTextColor = Color.Black,

@@ -99,6 +99,16 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.example.ui.util.ImageCropUtil
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
 import com.example.data.models.User
 import com.example.data.models.UserRole
 import com.example.data.models.DepartmentConstants
@@ -1022,9 +1032,6 @@ fun ProfilePhotoPickerField(
     subtitle: String,
     accentColor: Color
 ) {
-    var photoZoom by remember { mutableFloatStateOf(1.0f) }
-    var photoOffsetX by remember { mutableFloatStateOf(0f) }
-    var photoOffsetY by remember { mutableFloatStateOf(0f) }
     var showAdjustDialog by remember { mutableStateOf(false) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -1032,23 +1039,16 @@ fun ProfilePhotoPickerField(
     ) { uri ->
         if (uri != null) {
             onPhotoSelected(uri.toString())
-            photoZoom = 1.0f
-            photoOffsetX = 0f
-            photoOffsetY = 0f
+            showAdjustDialog = true
         }
     }
 
     if (showAdjustDialog && selectedPhotoUri != null) {
         AdjustPhotoDialog(
             photoUri = selectedPhotoUri,
-            currentZoom = photoZoom,
-            currentOffsetX = photoOffsetX,
-            currentOffsetY = photoOffsetY,
             accentColor = accentColor,
-            onSave = { zoom, ox, oy ->
-                photoZoom = zoom
-                photoOffsetX = ox
-                photoOffsetY = oy
+            onSaveCroppedUri = { croppedUri ->
+                onPhotoSelected(croppedUri)
                 showAdjustDialog = false
             },
             onDismiss = { showAdjustDialog = false }
@@ -1106,52 +1106,37 @@ fun ProfilePhotoPickerField(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Finger-Interactive Photo Viewport
+            // Clean, non-broken Profile Photo Viewport
             Box(
-                contentAlignment = Alignment.BottomEnd,
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(150.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(GreenMintBackground)
-                    .border(2.dp, if (selectedPhotoUri != null) accentColor else CardBorderColor, RoundedCornerShape(20.dp))
+                    .clip(CircleShape)
+                    .background(Color(0xFFE2E8F0))
+                    .border(3.dp, if (selectedPhotoUri != null) accentColor else CardBorderColor, CircleShape)
+                    .clickable {
+                        if (selectedPhotoUri != null) {
+                            showAdjustDialog = true
+                        } else {
+                            photoPickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        }
+                    }
             ) {
                 if (selectedPhotoUri != null) {
-                    Box(
+                    AsyncImage(
+                        model = selectedPhotoUri,
+                        contentDescription = "Adjustable Profile Photo",
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(20.dp))
-                            .pointerInput(selectedPhotoUri) {
-                                detectTransformGestures { _, pan, zoom, _ ->
-                                    photoZoom = (photoZoom * zoom).coerceIn(0.6f, 4.0f)
-                                    photoOffsetX = (photoOffsetX + pan.x).coerceIn(-350f, 350f)
-                                    photoOffsetY = (photoOffsetY + pan.y).coerceIn(-350f, 350f)
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AsyncImage(
-                            model = selectedPhotoUri,
-                            contentDescription = "Adjustable Profile Photo",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer {
-                                    scaleX = photoZoom
-                                    scaleY = photoZoom
-                                    translationX = photoOffsetX
-                                    translationY = photoOffsetY
-                                }
-                        )
-                    }
+                            .clip(CircleShape)
+                    )
                 } else {
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .clickable {
-                                photoPickerLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            },
+                            .fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
@@ -1162,7 +1147,7 @@ fun ProfilePhotoPickerField(
                                 imageVector = Icons.Default.Person,
                                 contentDescription = null,
                                 tint = TextMuted,
-                                modifier = Modifier.size(40.dp)
+                                modifier = Modifier.size(44.dp)
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -1174,38 +1159,11 @@ fun ProfilePhotoPickerField(
                         }
                     }
                 }
-
-                // Overlay badge in bottom-right corner
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(accentColor)
-                        .border(2.dp, Color.White, CircleShape)
-                        .clickable {
-                            if (selectedPhotoUri == null) {
-                                photoPickerLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            } else {
-                                showAdjustDialog = true
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (selectedPhotoUri != null) Icons.Default.Crop else Icons.Default.PhotoCamera,
-                        contentDescription = "Adjust Photo",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
             if (selectedPhotoUri != null) {
-                // Helpful gesture prompt
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
@@ -1222,75 +1180,11 @@ fun ProfilePhotoPickerField(
                     )
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = "Use finger to drag & adjust photo • Pinch to zoom",
+                        text = "Photo adjusted & ready • Tap 'Adjust with Finger' to edit",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = GreenDark
                     )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Zoom & Center Control Bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(GreenContainer.copy(alpha = 0.6f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = { photoZoom = (photoZoom - 0.15f).coerceAtLeast(0.6f) },
-                        modifier = Modifier.size(30.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ZoomOut,
-                            contentDescription = "Zoom Out",
-                            tint = GreenDark,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Zoom: ${(photoZoom * 100).toInt()}%",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextDark
-                        )
-                        if (photoZoom != 1.0f || photoOffsetX != 0f || photoOffsetY != 0f) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Center",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = accentColor,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(accentColor.copy(alpha = 0.15f))
-                                    .clickable {
-                                        photoZoom = 1.0f
-                                        photoOffsetX = 0f
-                                        photoOffsetY = 0f
-                                    }
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-
-                    IconButton(
-                        onClick = { photoZoom = (photoZoom + 0.15f).coerceAtMost(3.5f) },
-                        modifier = Modifier.size(30.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ZoomIn,
-                            contentDescription = "Zoom In",
-                            tint = GreenDark,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
                 }
             } else {
                 Text(
@@ -1355,9 +1249,6 @@ fun ProfilePhotoPickerField(
                     TextButton(
                         onClick = {
                             onPhotoSelected(null)
-                            photoZoom = 1f
-                            photoOffsetX = 0f
-                            photoOffsetY = 0f
                         },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
@@ -1378,16 +1269,17 @@ fun ProfilePhotoPickerField(
 @Composable
 fun AdjustPhotoDialog(
     photoUri: String,
-    currentZoom: Float,
-    currentOffsetX: Float,
-    currentOffsetY: Float,
     accentColor: Color,
-    onSave: (zoom: Float, offsetX: Float, offsetY: Float) -> Unit,
+    onSaveCroppedUri: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var tempZoom by remember { mutableFloatStateOf(currentZoom) }
-    var tempOffsetX by remember { mutableFloatStateOf(currentOffsetX) }
-    var tempOffsetY by remember { mutableFloatStateOf(currentOffsetY) }
+    var tempZoom by remember { mutableFloatStateOf(1.0f) }
+    var tempOffsetX by remember { mutableFloatStateOf(0f) }
+    var tempOffsetY by remember { mutableFloatStateOf(0f) }
+    var isProcessing by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -1431,7 +1323,7 @@ fun AdjustPhotoDialog(
                 }
 
                 Text(
-                    text = "Slide & drag image with your finger in any direction. Pinch to zoom in or out.",
+                    text = "Slide & drag image with your finger in any direction to frame face. Pinch to zoom.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextMuted,
                     fontSize = 11.sp,
@@ -1440,18 +1332,22 @@ fun AdjustPhotoDialog(
                         .padding(top = 4.dp, bottom = 12.dp)
                 )
 
-                // Large Interactive Finger-Adjust Canvas
+                // Large Interactive Finger-Adjust Canvas with strictly clamped bounds
+                val currentMaxPan = ((tempZoom - 1.0f) * 110f).coerceAtLeast(0f)
+
                 Box(
                     modifier = Modifier
                         .size(240.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(Color(0xFF0F172A))
                         .border(2.dp, accentColor, RoundedCornerShape(20.dp))
-                        .pointerInput(Unit) {
+                        .pointerInput(photoUri) {
                             detectTransformGestures { _, pan, zoom, _ ->
-                                tempZoom = (tempZoom * zoom).coerceIn(0.6f, 4.5f)
-                                tempOffsetX = (tempOffsetX + pan.x).coerceIn(-400f, 400f)
-                                tempOffsetY = (tempOffsetY + pan.y).coerceIn(-400f, 400f)
+                                val newZoom = (tempZoom * zoom).coerceIn(1.0f, 4.0f)
+                                tempZoom = newZoom
+                                val maxP = ((newZoom - 1.0f) * 110f).coerceAtLeast(0f)
+                                tempOffsetX = (tempOffsetX + pan.x).coerceIn(-maxP, maxP)
+                                tempOffsetY = (tempOffsetY + pan.y).coerceIn(-maxP, maxP)
                             }
                         },
                     contentAlignment = Alignment.Center
@@ -1471,11 +1367,16 @@ fun AdjustPhotoDialog(
                     )
 
                     // Translucent circular photo frame guide
-                    Box(
-                        modifier = Modifier
-                            .size(190.dp)
-                            .border(2.dp, Color.White.copy(alpha = 0.85f), CircleShape)
-                    )
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val radius = 100.dp.toPx()
+                        val center = Offset(size.width / 2, size.height / 2)
+                        drawCircle(
+                            color = Color.White,
+                            radius = radius,
+                            center = center,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx())
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -1498,14 +1399,22 @@ fun AdjustPhotoDialog(
                     )
 
                     IconButton(
-                        onClick = { tempOffsetX = (tempOffsetX - 20f).coerceAtLeast(-400f) },
+                        onClick = {
+                            if (tempZoom <= 1.05f) tempZoom = 1.3f
+                            val maxP = ((tempZoom - 1f) * 110f).coerceAtLeast(0f)
+                            tempOffsetX = (tempOffsetX - 20f).coerceIn(-maxP, maxP)
+                        },
                         modifier = Modifier.size(30.dp)
                     ) {
                         Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Left", tint = TextDark, modifier = Modifier.size(20.dp))
                     }
 
                     IconButton(
-                        onClick = { tempOffsetY = (tempOffsetY - 20f).coerceAtLeast(-400f) },
+                        onClick = {
+                            if (tempZoom <= 1.05f) tempZoom = 1.3f
+                            val maxP = ((tempZoom - 1f) * 110f).coerceAtLeast(0f)
+                            tempOffsetY = (tempOffsetY - 20f).coerceIn(-maxP, maxP)
+                        },
                         modifier = Modifier.size(30.dp)
                     ) {
                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Up", tint = TextDark, modifier = Modifier.size(20.dp))
@@ -1522,14 +1431,22 @@ fun AdjustPhotoDialog(
                     }
 
                     IconButton(
-                        onClick = { tempOffsetY = (tempOffsetY + 20f).coerceAtMost(400f) },
+                        onClick = {
+                            if (tempZoom <= 1.05f) tempZoom = 1.3f
+                            val maxP = ((tempZoom - 1f) * 110f).coerceAtLeast(0f)
+                            tempOffsetY = (tempOffsetY + 20f).coerceIn(-maxP, maxP)
+                        },
                         modifier = Modifier.size(30.dp)
                     ) {
                         Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Down", tint = TextDark, modifier = Modifier.size(20.dp))
                     }
 
                     IconButton(
-                        onClick = { tempOffsetX = (tempOffsetX + 20f).coerceAtMost(400f) },
+                        onClick = {
+                            if (tempZoom <= 1.05f) tempZoom = 1.3f
+                            val maxP = ((tempZoom - 1f) * 110f).coerceAtLeast(0f)
+                            tempOffsetX = (tempOffsetX + 20f).coerceIn(-maxP, maxP)
+                        },
                         modifier = Modifier.size(30.dp)
                     ) {
                         Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Right", tint = TextDark, modifier = Modifier.size(20.dp))
@@ -1544,7 +1461,13 @@ fun AdjustPhotoDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = { tempZoom = (tempZoom - 0.15f).coerceAtLeast(0.6f) },
+                        onClick = {
+                            val newZ = (tempZoom - 0.15f).coerceAtLeast(1.0f)
+                            tempZoom = newZ
+                            val maxP = ((newZ - 1f) * 110f).coerceAtLeast(0f)
+                            tempOffsetX = tempOffsetX.coerceIn(-maxP, maxP)
+                            tempOffsetY = tempOffsetY.coerceIn(-maxP, maxP)
+                        },
                         modifier = Modifier.size(34.dp)
                     ) {
                         Icon(Icons.Default.ZoomOut, contentDescription = "Zoom Out", tint = TextDark, modifier = Modifier.size(20.dp))
@@ -1552,8 +1475,13 @@ fun AdjustPhotoDialog(
 
                     Slider(
                         value = tempZoom,
-                        onValueChange = { tempZoom = it },
-                        valueRange = 0.6f..4.0f,
+                        onValueChange = { newZ ->
+                            tempZoom = newZ
+                            val maxP = ((newZ - 1f) * 110f).coerceAtLeast(0f)
+                            tempOffsetX = tempOffsetX.coerceIn(-maxP, maxP)
+                            tempOffsetY = tempOffsetY.coerceIn(-maxP, maxP)
+                        },
+                        valueRange = 1.0f..4.0f,
                         modifier = Modifier.weight(1f),
                         colors = SliderDefaults.colors(
                             thumbColor = accentColor,
@@ -1563,7 +1491,10 @@ fun AdjustPhotoDialog(
                     )
 
                     IconButton(
-                        onClick = { tempZoom = (tempZoom + 0.15f).coerceAtMost(4.0f) },
+                        onClick = {
+                            val newZ = (tempZoom + 0.15f).coerceAtMost(4.0f)
+                            tempZoom = newZ
+                        },
                         modifier = Modifier.size(34.dp)
                     ) {
                         Icon(Icons.Default.ZoomIn, contentDescription = "Zoom In", tint = TextDark, modifier = Modifier.size(20.dp))
@@ -1595,20 +1526,56 @@ fun AdjustPhotoDialog(
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = TextDark),
-                        border = BorderStroke(1.dp, CardBorderColor)
+                        border = BorderStroke(1.dp, CardBorderColor),
+                        enabled = !isProcessing
                     ) {
                         Text("Reset All", fontSize = 12.sp, color = TextDark)
                     }
 
                     Button(
-                        onClick = { onSave(tempZoom, tempOffsetX, tempOffsetY) },
+                        onClick = {
+                            if (isProcessing) return@Button
+                            isProcessing = true
+                            coroutineScope.launch(Dispatchers.IO) {
+                                val panXRatio = if (currentMaxPan > 0f) -(tempOffsetX / currentMaxPan).coerceIn(-1f, 1f) else 0f
+                                val panYRatio = if (currentMaxPan > 0f) -(tempOffsetY / currentMaxPan).coerceIn(-1f, 1f) else 0f
+
+                                val cropped = ImageCropUtil.cropAndSaveSquare(
+                                    context = context,
+                                    sourceUri = Uri.parse(photoUri),
+                                    zoom = tempZoom,
+                                    panXPercent = panXRatio,
+                                    panYPercent = panYRatio
+                                )
+
+                                withContext(Dispatchers.Main) {
+                                    isProcessing = false
+                                    if (cropped != null) {
+                                        onSaveCroppedUri(cropped)
+                                    } else {
+                                        onSaveCroppedUri(photoUri)
+                                    }
+                                }
+                            }
+                        },
                         modifier = Modifier.weight(1.3f),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                        enabled = !isProcessing
                     ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Save & Apply", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        if (isProcessing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Saving...", fontSize = 13.sp, color = Color.White)
+                        } else {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Save & Apply", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                     }
                 }
             }

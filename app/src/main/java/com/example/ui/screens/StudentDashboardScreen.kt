@@ -108,7 +108,7 @@ fun StudentDashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Apply for Local, Home, or Emergency Outpass with instant multi-tier approvals.",
+                            text = "Apply for Local or Home Outpass with instant multi-tier approvals.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f),
                             fontSize = 11.sp

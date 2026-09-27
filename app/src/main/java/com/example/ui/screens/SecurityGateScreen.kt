@@ -342,69 +342,47 @@ private fun GatePassSearchResultCard(
                         }
                     }
                 } else if (outpass.status == OutpassStatus.CHECKED_OUT) {
-                    if (isLongPermanentLeave) {
-                        // Long Outpass (12h, 24h, 48h) -> Permanent leave for today, no return entry option shown
+                    Column(modifier = Modifier.fillMaxWidth()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFFF1F5F9))
+                                .background(GreenContainer)
                                 .padding(10.dp)
                         ) {
                             Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = GreenDark, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Student Currently Outside Campus:",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = GreenDark
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(3.dp))
                                 Text(
-                                    text = "Long-Term / Permanent Leave (${durationHours} Hours Pass)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
+                                    text = "Exited: ${outpass.actualCheckOutTime?.let { df.format(Date(it)) } ?: "Exited"} • Expected Return: ${df.format(Date(outpass.returnDateTime))}",
+                                    fontSize = 11.sp,
                                     color = TextDark
                                 )
                                 Text(
-                                    text = "Return entry option not shown. Student ${outpass.studentName} (${outpass.department}) is on multi-day/permanent leave for today.",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    text = "If student returns to college today, tap below to record same-day re-entry.",
                                     fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = TextMuted
                                 )
                             }
                         }
-                    } else {
-                        // Short Outpass (<12h) -> Show Return (Check-In) option with name, department and timing
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .padding(8.dp)
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "Return Entry Details:",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = EmeraldSuccess
-                                    )
-                                    Text(
-                                        text = "Student: ${outpass.studentName} • Dept: ${outpass.department}",
-                                        fontSize = 11.sp,
-                                        color = TextDark
-                                    )
-                                    Text(
-                                        text = "Exit: ${outpass.actualCheckOutTime?.let { df.format(Date(it)) } ?: "Exited"} | Expected Return: ${df.format(Date(outpass.returnDateTime))}",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            GreenAnimatedButton(
-                                onClick = onCheckIn,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("1-Tap Gate CHECK-IN (Campus Entry)", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        GreenAnimatedButton(
+                            onClick = onCheckIn,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("1-Tap Same-Day RE-ENTRY (Student Entered Campus)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
                     }
                 } else if (outpass.status == OutpassStatus.CHECKED_IN) {

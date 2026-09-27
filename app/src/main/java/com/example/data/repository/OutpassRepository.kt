@@ -1,5 +1,11 @@
 package com.example.data.repository
 
+import android.content.Context
+import com.example.data.local.AppDatabase
+import com.example.data.local.LocalBackupStorage
+import com.example.data.local.entities.GateLogEntity
+import com.example.data.local.entities.OutpassEntity
+import com.example.data.local.entities.UserEntity
 import com.example.data.models.ApprovalRecord
 import com.example.data.models.GateLog
 import com.example.data.models.Outpass
@@ -8,9 +14,13 @@ import com.example.data.models.OutpassType
 import com.example.data.models.User
 import com.example.data.models.UserRole
 import com.example.data.models.DepartmentConstants
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,9 +32,91 @@ class OutpassRepository {
         @Volatile
         private var instance: OutpassRepository? = null
 
-        fun getInstance(): OutpassRepository {
+        fun getInstance(context: Context? = null): OutpassRepository {
             return instance ?: synchronized(this) {
-                instance ?: OutpassRepository().also { instance = it }
+                instance ?: OutpassRepository().also { repo ->
+                    instance = repo
+                    if (context != null) {
+                        repo.initialize(context)
+                    }
+                }
+            }
+        }
+
+        fun initialize(context: Context): OutpassRepository {
+            val repo = getInstance(context)
+            repo.initialize(context)
+            return repo
+        }
+    }
+
+    private var appContext: Context? = null
+    private val repoScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    fun initialize(context: Context) {
+        val appCtx = context.applicationContext
+        this.appContext = appCtx
+
+        // 1. Synchronously load users from LocalBackupStorage so there is zero delay on startup
+        val savedUsers = LocalBackupStorage.loadUsers(appCtx)
+        if (!savedUsers.isNullOrEmpty()) {
+            val merged = savedUsers.toMutableList()
+            for (demo in demoUsers) {
+                if (merged.none { it.id == demo.id || it.email.equals(demo.email, ignoreCase = true) }) {
+                    merged.add(demo)
+                }
+            }
+            _users.value = merged
+        } else {
+            _users.value = demoUsers
+            LocalBackupStorage.saveUsers(appCtx, demoUsers)
+        }
+
+        // 2. Synchronously load outpasses from storage
+        val savedOutpasses = LocalBackupStorage.loadOutpasses(appCtx)
+        if (!savedOutpasses.isNullOrEmpty()) {
+            _outpasses.value = savedOutpasses
+        } else {
+            _outpasses.value = seedOutpasses
+            LocalBackupStorage.saveOutpasses(appCtx, seedOutpasses)
+        }
+
+        // 3. Synchronously load gate logs from storage
+        val savedLogs = LocalBackupStorage.loadGateLogs(appCtx)
+        if (!savedLogs.isNullOrEmpty()) {
+            _gateLogs.value = savedLogs
+        } else {
+            _gateLogs.value = seedGateLogs
+            LocalBackupStorage.saveGateLogs(appCtx, seedGateLogs)
+        }
+
+        // 4. Background Room Database synchronization
+        repoScope.launch {
+            try {
+                val db = AppDatabase.getDatabase(appCtx)
+                val roomUsers = db.userDao().getAllUsers()
+                if (roomUsers.isEmpty()) {
+                    db.userDao().insertUsers(_users.value.map { UserEntity.fromUser(it) })
+                } else {
+                    val map = _users.value.associateBy { it.id }.toMutableMap()
+                    for (ru in roomUsers) {
+                        map[ru.id] = ru.toUser()
+                    }
+                    _users.value = map.values.toList()
+                    LocalBackupStorage.saveUsers(appCtx, _users.value)
+                }
+
+                val roomOutpasses = db.outpassDao().getAllOutpasses()
+                if (roomOutpasses.isEmpty()) {
+                    db.outpassDao().insertOutpasses(_outpasses.value.map { OutpassEntity.fromOutpass(it) })
+                }
+
+                val roomLogs = db.gateLogDao().getAllGateLogs()
+                if (roomLogs.isEmpty()) {
+                    db.gateLogDao().insertGateLogs(_gateLogs.value.map { GateLogEntity.fromGateLog(it) })
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
@@ -348,14 +440,60 @@ class OutpassRepository {
     private val _outpasses = MutableStateFlow<List<Outpass>>(seedOutpasses)
     val outpasses: StateFlow<List<Outpass>> = _outpasses.asStateFlow()
 
-    private val _gateLogs = MutableStateFlow<List<GateLog>>(
-        listOf(
-            GateLog("log-1", "PASS-1003", "Alex Morgan", "21CS045", "CHECK_OUT", now - (2 * hourMs), "Officer Ram Singh", "Exit scan verified at Gate 1"),
-            GateLog("log-2", "PASS-1004", "Alex Morgan", "21CS045", "CHECK_OUT", now - (47 * hourMs), "Officer Ram Singh", "Team exit for Hackathon"),
-            GateLog("log-3", "PASS-1004", "Alex Morgan", "21CS045", "CHECK_IN", now - (25 * hourMs), "Officer Ram Singh", "Returned safely with team")
-        )
+    private val seedGateLogs = listOf(
+        GateLog("log-1", "PASS-1003", "Alex Morgan", "21CS045", "CHECK_OUT", now - (2 * hourMs), "Officer Ram Singh", "Exit scan verified at Gate 1"),
+        GateLog("log-2", "PASS-1004", "Alex Morgan", "21CS045", "CHECK_OUT", now - (47 * hourMs), "Officer Ram Singh", "Team exit for Hackathon"),
+        GateLog("log-3", "PASS-1004", "Alex Morgan", "21CS045", "CHECK_IN", now - (25 * hourMs), "Officer Ram Singh", "Returned safely with team")
     )
+
+    private val _gateLogs = MutableStateFlow<List<GateLog>>(seedGateLogs)
     val gateLogs: StateFlow<List<GateLog>> = _gateLogs.asStateFlow()
+
+    // Persistent storage helpers
+    private fun persistUsers() {
+        val list = _users.value
+        appContext?.let { ctx ->
+            LocalBackupStorage.saveUsers(ctx, list)
+            repoScope.launch {
+                try {
+                    val db = AppDatabase.getDatabase(ctx)
+                    db.userDao().insertUsers(list.map { UserEntity.fromUser(it) })
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    private fun persistOutpasses() {
+        val list = _outpasses.value
+        appContext?.let { ctx ->
+            LocalBackupStorage.saveOutpasses(ctx, list)
+            repoScope.launch {
+                try {
+                    val db = AppDatabase.getDatabase(ctx)
+                    db.outpassDao().insertOutpasses(list.map { OutpassEntity.fromOutpass(it) })
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    private fun persistGateLogs() {
+        val list = _gateLogs.value
+        appContext?.let { ctx ->
+            LocalBackupStorage.saveGateLogs(ctx, list)
+            repoScope.launch {
+                try {
+                    val db = AppDatabase.getDatabase(ctx)
+                    db.gateLogDao().insertGateLogs(list.map { GateLogEntity.fromGateLog(it) })
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
 
     // Authentication methods
     fun setCurrentUser(user: User) {
@@ -373,22 +511,69 @@ class OutpassRepository {
         }
     }
 
-    fun login(query: String, passwordAttempt: String? = null): Boolean {
+    fun login(query: String, passwordAttempt: String? = null, requiredRole: UserRole? = null): Triple<Boolean, String, User?> {
         val clean = query.trim()
         val user = _users.value.firstOrNull { 
             it.email.equals(clean, ignoreCase = true) || 
             it.regNo.equals(clean, ignoreCase = true) ||
             it.id.equals(clean, ignoreCase = true)
-        } ?: return false
+        } ?: return Triple(false, "Account not found for '$query'. Please register an account.", null)
+
+        if (requiredRole != null && user.role != requiredRole) {
+            return Triple(
+                false,
+                "Role Restriction: You selected '${requiredRole.displayName}', but this account is registered as '${user.role.displayName}'. Please click '${user.role.displayName}' above to enter the ${user.role.displayName} module.",
+                null
+            )
+        }
 
         if (!passwordAttempt.isNullOrBlank()) {
             if (user.password.isNotBlank() && user.password != passwordAttempt) {
-                return false
+                return Triple(false, "Incorrect password. If you forgot your password, please click 'Forgot Password?'.", null)
             }
         }
 
         _currentUser.value = user
-        return true
+        return Triple(true, "Login successful", user)
+    }
+
+    fun login(query: String): Boolean {
+        return login(query, null, null).first
+    }
+
+    fun updateUser(updatedUser: User) {
+        val list = _users.value.toMutableList()
+        val index = list.indexOfFirst { it.id == updatedUser.id }
+        if (index != -1) {
+            list[index] = updatedUser
+            _users.value = list
+            if (_currentUser.value?.id == updatedUser.id) {
+                _currentUser.value = updatedUser
+            }
+            persistUsers()
+        }
+    }
+
+    fun deleteUser(userId: String): Boolean {
+        val list = _users.value.toMutableList()
+        val removed = list.removeAll { it.id == userId }
+        if (removed) {
+            _users.value = list
+            if (_currentUser.value?.id == userId) {
+                _currentUser.value = list.firstOrNull()
+            }
+            persistUsers()
+            appContext?.let { ctx ->
+                repoScope.launch {
+                    try {
+                        AppDatabase.getDatabase(ctx).userDao().deleteUserById(userId)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+        }
+        return removed
     }
 
     fun findUserByIdentifier(identifier: String): User? {
@@ -425,15 +610,26 @@ class OutpassRepository {
         if (_currentUser.value?.id == existingUser.id) {
             _currentUser.value = updatedUser
         }
+        persistUsers()
 
         return Pair(true, "Password updated successfully for ${updatedUser.name}!")
     }
 
     fun registerUser(user: User) {
         val updated = _users.value.toMutableList()
-        updated.add(user)
+        val index = updated.indexOfFirst { 
+            it.id == user.id || 
+            it.email.equals(user.email, ignoreCase = true) || 
+            (user.regNo.isNotBlank() && it.regNo.equals(user.regNo, ignoreCase = true))
+        }
+        if (index != -1) {
+            updated[index] = user
+        } else {
+            updated.add(user)
+        }
         _users.value = updated
         _currentUser.value = user
+        persistUsers()
     }
 
     fun applyOutpass(
@@ -469,6 +665,7 @@ class OutpassRepository {
         val list = _outpasses.value.toMutableList()
         list.add(0, newPass)
         _outpasses.value = list
+        persistOutpasses()
         return newPass
     }
 
@@ -498,6 +695,7 @@ class OutpassRepository {
 
             list[index] = updatedPass
             _outpasses.value = list
+            persistOutpasses()
         }
     }
 
@@ -517,6 +715,7 @@ class OutpassRepository {
             )
             list[index] = updatedPass
             _outpasses.value = list
+            persistOutpasses()
         }
     }
 
@@ -543,6 +742,7 @@ class OutpassRepository {
         )
         list[index] = updatedPass
         _outpasses.value = list
+        persistOutpasses()
 
         val newLog = GateLog(
             id = "log-" + UUID.randomUUID().toString().take(6),
@@ -557,11 +757,12 @@ class OutpassRepository {
         val logs = _gateLogs.value.toMutableList()
         logs.add(0, newLog)
         _gateLogs.value = logs
+        persistGateLogs()
 
         return "SUCCESS: Exit scan verified for ${pass.studentName} (${pass.department}). Gate Exit logged & QR Code is now EXPIRED."
     }
 
-    fun checkInGate(passId: String, officerName: String): String {
+    fun checkInGate(passId: String, officerName: String, isSameDayReentry: Boolean = true): String {
         val list = _outpasses.value.toMutableList()
         val index = list.indexOfFirst { it.id == passId }
         if (index == -1) return "Outpass ID $passId not found."
@@ -575,26 +776,35 @@ class OutpassRepository {
         val updatedPass = pass.copy(
             status = OutpassStatus.CHECKED_IN,
             actualCheckInTime = nowTime,
-            qrToken = "${pass.id}::${pass.regNo}::CHECKED_IN::${pass.returnDateTime}"
+            qrToken = "${pass.id}::${pass.regNo}::CHECKED_IN::$nowTime"
         )
         list[index] = updatedPass
         _outpasses.value = list
+        persistOutpasses()
+
+        val actionName = if (isSameDayReentry) "SAME_DAY_REENTRY" else "CHECK_IN"
+        val remarksMsg = if (isSameDayReentry) {
+            "Student returned on the same day. Same-day campus re-entry verified at Main Gate."
+        } else {
+            "Campus Gate Entry recorded."
+        }
 
         val newLog = GateLog(
             id = "log-" + UUID.randomUUID().toString().take(6),
             outpassId = pass.id,
             studentName = pass.studentName,
             regNo = pass.regNo,
-            action = "CHECK_IN",
+            action = actionName,
             timestamp = nowTime,
             officerName = officerName,
-            remarks = "Campus Gate Entry recorded."
+            remarks = remarksMsg
         )
         val logs = _gateLogs.value.toMutableList()
         logs.add(0, newLog)
         _gateLogs.value = logs
+        persistGateLogs()
 
         val df = SimpleDateFormat("hh:mm a", Locale.getDefault())
-        return "SUCCESS: Student ${pass.studentName} (${pass.department}) Checked-In / Entry recorded at Main Gate at ${df.format(Date(nowTime))}."
+        return "SUCCESS: Same-Day Re-Entry verified for ${pass.studentName} (${pass.department}) at Main Gate at ${df.format(Date(nowTime))}."
     }
 }
