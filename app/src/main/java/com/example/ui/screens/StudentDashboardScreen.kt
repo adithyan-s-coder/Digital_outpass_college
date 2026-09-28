@@ -25,8 +25,10 @@ import androidx.compose.material.icons.filled.AddCard
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
+import com.example.data.models.OutpassType
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.ui.layout.ContentScale
@@ -423,7 +425,11 @@ fun DigitalGatePassCard(outpass: Outpass) {
                 Spacer(modifier = Modifier.height(6.dp))
                 DetailRow(label = "Valid From", value = df.format(Date(outpass.outDateTime)), icon = Icons.Default.CalendarToday)
                 Spacer(modifier = Modifier.height(6.dp))
-                DetailRow(label = "Return Till", value = df.format(Date(outpass.returnDateTime)), icon = Icons.Default.Alarm)
+                if (outpass.type == OutpassType.HOME) {
+                    DetailRow(label = "Leave Type", value = "Home Outpass (Going Home Leave)", icon = Icons.Default.Home)
+                } else {
+                    DetailRow(label = "Return Till", value = df.format(Date(outpass.returnDateTime)), icon = Icons.Default.Alarm)
+                }
             }
         }
     }
@@ -500,12 +506,21 @@ fun StudentPassSummaryCard(outpass: Outpass) {
                     color = TextDark
                 )
 
-                Text(
-                    text = "Return: ${df.format(Date(outpass.returnDateTime))}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 11.sp
-                )
+                if (outpass.type == OutpassType.HOME) {
+                    Text(
+                        text = "Departure: ${df.format(Date(outpass.outDateTime))} • Home Leave",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                } else {
+                    Text(
+                        text = "Return: ${df.format(Date(outpass.returnDateTime))}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                }
             }
 
             StatusBadge(status = outpass.status)

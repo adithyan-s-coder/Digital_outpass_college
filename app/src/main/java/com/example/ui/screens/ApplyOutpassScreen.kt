@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -202,9 +203,11 @@ fun ApplyOutpassScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // 2. Filling Departure Time and Arriving Time
+            val isHomePass = selectedType == OutpassType.HOME
+
+            // 2. Filling Departure Time (and Arriving Time for Local Outpass)
             Text(
-                text = "2. Fill Departure Time & Arriving Time",
+                text = if (isHomePass) "2. Fill Departure Details (Out Time)" else "2. Fill Departure Time & Arriving Time",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = GreenDark
@@ -290,136 +293,154 @@ fun ApplyOutpassScreen(
 
                     // Quick-fill buttons for Departure
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        QuickFillChip(
-                            label = "Now",
-                            onClick = {
-                                val c = Calendar.getInstance()
-                                departureDate = dfDateOnly.format(c.time)
-                                departureTime = dfTimeOnly.format(c.time)
-                            }
-                        )
-                        QuickFillChip(
-                            label = "Today",
-                            onClick = {
-                                departureDate = dfDateOnly.format(Calendar.getInstance().time)
-                            }
-                        )
-                        QuickFillChip(
-                            label = "Tomorrow",
-                            onClick = {
-                                val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
-                                departureDate = dfDateOnly.format(c.time)
-                            }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(CardBorderColor))
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // ARRIVING TIME FILLING
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(IndigoPrimary.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Alarm, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "Arriving Details (Return Time)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = TextDark
-                            )
-                            Text(
-                                text = "Fill the exact date & time you return to college",
-                                fontSize = 11.sp,
-                                color = TextMuted
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
+                    LazyRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedTextField(
-                            value = arrivalDate,
-                            onValueChange = {
-                                arrivalDate = it
-                                errorMsg = null
-                            },
-                            label = { Text("Arriving Date") },
-                            placeholder = { Text("e.g. 27 Sep 2026") },
-                            leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(16.dp)) },
-                            modifier = Modifier.weight(1.1f),
-                            colors = inputFieldColors(),
-                            singleLine = true
-                        )
-
-                        OutlinedTextField(
-                            value = arrivalTime,
-                            onValueChange = {
-                                arrivalTime = it
-                                errorMsg = null
-                            },
-                            label = { Text("Arriving Time") },
-                            placeholder = { Text("e.g. 06:30 PM") },
-                            leadingIcon = { Icon(Icons.Default.Alarm, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(16.dp)) },
-                            modifier = Modifier.weight(1f),
-                            colors = inputFieldColors(),
-                            singleLine = true
-                        )
+                        item {
+                            QuickFillChip(
+                                label = "Now",
+                                onClick = {
+                                    val c = Calendar.getInstance()
+                                    departureDate = dfDateOnly.format(c.time)
+                                    departureTime = dfTimeOnly.format(c.time)
+                                }
+                            )
+                        }
+                        item {
+                            QuickFillChip(
+                                label = "Today",
+                                onClick = {
+                                    departureDate = dfDateOnly.format(Calendar.getInstance().time)
+                                }
+                            )
+                        }
+                        item {
+                            QuickFillChip(
+                                label = "Tomorrow",
+                                onClick = {
+                                    val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
+                                    departureDate = dfDateOnly.format(c.time)
+                                }
+                            )
+                        }
                     }
 
-                    // Quick-fill buttons for Arrival
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        QuickFillChip(
-                            label = "Same Day",
-                            onClick = {
-                                arrivalDate = departureDate
+                    // ARRIVING TIME FILLING: Shown ONLY for Local Outpass
+                    if (!isHomePass) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(CardBorderColor))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(IndigoPrimary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Alarm, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(18.dp))
                             }
-                        )
-                        QuickFillChip(
-                            label = "Tomorrow",
-                            onClick = {
-                                val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
-                                arrivalDate = dfDateOnly.format(c.time)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Arriving Details (Return Time)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = TextDark
+                                )
+                                Text(
+                                    text = "Fill the exact date & time you return to college",
+                                    fontSize = 11.sp,
+                                    color = TextMuted
+                                )
                             }
-                        )
-                        QuickFillChip(
-                            label = "In 2 Days",
-                            onClick = {
-                                val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 2) }
-                                arrivalDate = dfDateOnly.format(c.time)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = arrivalDate,
+                                onValueChange = {
+                                    arrivalDate = it
+                                    errorMsg = null
+                                },
+                                label = { Text("Arriving Date") },
+                                placeholder = { Text("e.g. 27 Sep 2026") },
+                                leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(16.dp)) },
+                                modifier = Modifier.weight(1.1f),
+                                colors = inputFieldColors(),
+                                singleLine = true
+                            )
+
+                            OutlinedTextField(
+                                value = arrivalTime,
+                                onValueChange = {
+                                    arrivalTime = it
+                                    errorMsg = null
+                                },
+                                label = { Text("Arriving Time") },
+                                placeholder = { Text("e.g. 06:30 PM") },
+                                leadingIcon = { Icon(Icons.Default.Alarm, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(16.dp)) },
+                                modifier = Modifier.weight(1f),
+                                colors = inputFieldColors(),
+                                singleLine = true
+                            )
+                        }
+
+                        // Quick-fill buttons for Arrival (Smooth scrollable LazyRow with fixed-width, unclipped chips)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            item {
+                                QuickFillChip(
+                                    label = "Same Day",
+                                    onClick = {
+                                        arrivalDate = departureDate
+                                    }
+                                )
                             }
-                        )
-                        QuickFillChip(
-                            label = "06:30 PM",
-                            onClick = { arrivalTime = "06:30 PM" }
-                        )
-                        QuickFillChip(
-                            label = "08:00 PM",
-                            onClick = { arrivalTime = "08:00 PM" }
-                        )
+                            item {
+                                QuickFillChip(
+                                    label = "Tomorrow",
+                                    onClick = {
+                                        val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
+                                        arrivalDate = dfDateOnly.format(c.time)
+                                    }
+                                )
+                            }
+                            item {
+                                QuickFillChip(
+                                    label = "In 2 Days",
+                                    onClick = {
+                                        val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 2) }
+                                        arrivalDate = dfDateOnly.format(c.time)
+                                    }
+                                )
+                            }
+                            item {
+                                QuickFillChip(
+                                    label = "06:30 PM",
+                                    onClick = { arrivalTime = "06:30 PM" }
+                                )
+                            }
+                            item {
+                                QuickFillChip(
+                                    label = "08:00 PM",
+                                    onClick = { arrivalTime = "08:00 PM" }
+                                )
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -436,10 +457,18 @@ fun ApplyOutpassScreen(
                                 Text("Departure: ", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = GreenDark)
                                 Text("$departureDate at $departureTime", fontSize = 12.sp, color = TextDark)
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Arriving: ", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = IndigoPrimary)
-                                Text("$arrivalDate at $arrivalTime", fontSize = 12.sp, color = TextDark)
+                            if (!isHomePass) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Arriving: ", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = IndigoPrimary)
+                                    Text("$arrivalDate at $arrivalTime", fontSize = 12.sp, color = TextDark)
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Pass Type: ", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = IndigoPrimary)
+                                    Text("Home Outpass (Going Home Leave)", fontSize = 12.sp, color = TextDark)
+                                }
                             }
                         }
                     }
@@ -515,18 +544,25 @@ fun ApplyOutpassScreen(
                         onClick = {
                             val nowMs = System.currentTimeMillis()
                             val outMs = computeTimeMs(departureDate, departureTime, nowMs)
-                            val returnMs = computeTimeMs(arrivalDate, arrivalTime, nowMs + (4 * 3600_000L))
 
                             if (destination.isBlank() || reason.isBlank()) {
                                 errorMsg = "Please enter both destination and purpose details."
                             } else if (departureDate.isBlank() || departureTime.isBlank()) {
                                 errorMsg = "Please fill in the departure date and time."
-                            } else if (arrivalDate.isBlank() || arrivalTime.isBlank()) {
-                                errorMsg = "Please fill in the arriving date and time."
-                            } else if (returnMs <= outMs) {
-                                errorMsg = "Arriving time must be after the departure time. Please check the filled date and time."
+                            } else if (!isHomePass) {
+                                val returnMs = computeTimeMs(arrivalDate, arrivalTime, nowMs + (4 * 3600_000L))
+                                if (arrivalDate.isBlank() || arrivalTime.isBlank()) {
+                                    errorMsg = "Please fill in the arriving date and time."
+                                } else if (returnMs <= outMs) {
+                                    errorMsg = "Arriving time must be after the departure time. Please check the filled date and time."
+                                } else {
+                                    onSubmitOutpass(selectedType, destination.trim(), reason.trim(), outMs, returnMs)
+                                    onNavigateBack()
+                                }
                             } else {
-                                onSubmitOutpass(selectedType, destination.trim(), reason.trim(), outMs, returnMs)
+                                // For Home Outpass: no arriving time required
+                                val homeReturnMs = outMs + (14 * 24 * 3600_000L) // 14-day leave window placeholder
+                                onSubmitOutpass(selectedType, destination.trim(), reason.trim(), outMs, homeReturnMs)
                                 onNavigateBack()
                             }
                         },
@@ -554,17 +590,20 @@ private fun QuickFillChip(
 ) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(GreenContainer)
+            .border(1.dp, GreenPrimary.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
             .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            fontSize = 11.sp,
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.Bold,
-            color = GreenDark
+            color = GreenDark,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }

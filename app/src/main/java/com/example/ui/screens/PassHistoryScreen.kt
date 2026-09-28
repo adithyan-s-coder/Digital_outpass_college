@@ -46,6 +46,7 @@ import coil.compose.AsyncImage
 import com.example.data.models.CompleteAiReport
 import com.example.data.models.Outpass
 import com.example.data.models.OutpassStatus
+import com.example.data.models.OutpassType
 import com.example.data.models.ReportDatePreset
 import com.example.data.models.User
 import com.example.data.models.UserRole
@@ -359,13 +360,23 @@ private fun HistoryPassCard(outpass: Outpass, df: SimpleDateFormat) {
                     fontSize = 10.sp
                 )
 
-                Text(
-                    text = "Return: ${df.format(Date(outpass.returnDateTime))}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextDark,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp
-                )
+                if (outpass.type == OutpassType.HOME) {
+                    Text(
+                        text = "Leave: Home Outpass",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextDark,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
+                    )
+                } else {
+                    Text(
+                        text = "Return: ${df.format(Date(outpass.returnDateTime))}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextDark,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
+                    )
+                }
             }
 
             if (outpass.staffApproval != null || outpass.hodApproval != null) {
