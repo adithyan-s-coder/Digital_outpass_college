@@ -15,6 +15,7 @@ import com.example.data.models.User
 import com.example.data.models.UserRole
 import com.example.data.models.DepartmentConstants
 import com.example.data.models.OutpassQrHelper
+import com.example.util.OutpassNotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -681,6 +682,12 @@ class OutpassRepository {
         list.add(0, newPass)
         _outpasses.value = list
         persistOutpasses()
+
+        // Send instant push notification to Staff Advisor and HOD
+        appContext?.let { ctx ->
+            OutpassNotificationHelper.notifyStaffAndHodOnNewRequest(ctx, newPass, student)
+        }
+
         return newPass
     }
 
@@ -710,6 +717,13 @@ class OutpassRepository {
             list[index] = passWithQr
             _outpasses.value = list
             persistOutpasses()
+
+            // If finally approved, notify student
+            appContext?.let { ctx ->
+                if (passWithQr.status == OutpassStatus.APPROVED) {
+                    OutpassNotificationHelper.notifyStudentOnApproval(ctx, passWithQr)
+                }
+            }
         }
     }
 
