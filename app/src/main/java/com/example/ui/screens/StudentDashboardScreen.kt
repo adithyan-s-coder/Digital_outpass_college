@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
+import com.example.ui.components.UserAvatar
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Button
@@ -63,6 +64,7 @@ import com.example.data.models.User
 import com.example.ui.components.MultiTierStatusTracker
 import com.example.ui.components.QrCodeCanvas
 import com.example.ui.components.StatusBadge
+import com.example.ui.theme.CrimsonError
 import com.example.ui.theme.EmeraldSuccess
 import com.example.ui.theme.IndigoPrimary
 import com.example.ui.theme.Slate700
@@ -223,9 +225,11 @@ fun StudentDashboardScreen(
 @Composable
 fun DigitalGatePassCard(outpass: Outpass) {
     var remainingTimeText by remember { mutableStateOf("") }
+    var qrTimeRemainingText by remember { mutableStateOf("") }
+    var isQrValidityExpired by remember { mutableStateOf(outpass.isQrExpired()) }
     val df = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
 
-    // Live countdown timer coroutine
+    // Live countdown timer coroutine for trip return time
     LaunchedEffect(outpass.returnDateTime) {
         while (true) {
             val nowMs = System.currentTimeMillis()
@@ -237,6 +241,29 @@ fun DigitalGatePassCard(outpass: Outpass) {
                 val minutes = (diffMs % (1000 * 60 * 60)) / (1000 * 60)
                 val seconds = (diffMs % (1000 * 60)) / 1000
                 remainingTimeText = String.format("%02dh : %02dm : %02ds", hours, minutes, seconds)
+            }
+            delay(1000)
+        }
+    }
+
+    // Live countdown timer coroutine specifically for 1-hour QR Code gate exit validity
+    LaunchedEffect(outpass.id, outpass.status, outpass.isQrUsed) {
+        while (true) {
+            val nowMs = System.currentTimeMillis()
+            val expiryTime = outpass.getQrExpiryTime()
+            val diffMs = expiryTime - nowMs
+
+            if (outpass.isQrUsed || outpass.status == OutpassStatus.CHECKED_OUT || outpass.status == OutpassStatus.CHECKED_IN) {
+                isQrValidityExpired = true
+                qrTimeRemainingText = "Used at Main Gate"
+            } else if (diffMs <= 0) {
+                isQrValidityExpired = true
+                qrTimeRemainingText = "00m : 00s (Expired)"
+            } else {
+                isQrValidityExpired = false
+                val minutes = diffMs / (1000 * 60)
+                val seconds = (diffMs % (1000 * 60)) / 1000
+                qrTimeRemainingText = String.format("%02dm : %02ds", minutes, seconds)
             }
             delay(1000)
         }
@@ -264,30 +291,12 @@ fun DigitalGatePassCard(outpass: Outpass) {
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(IndigoPrimary.copy(alpha = 0.2f))
-                            .border(1.5.dp, IndigoPrimary, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (outpass.studentPhotoUri != null) {
-                            AsyncImage(
-                                model = outpass.studentPhotoUri,
-                                contentDescription = outpass.studentName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = IndigoPrimary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+                    UserAvatar(
+                        photoUri = outpass.studentPhotoUri,
+                        name = outpass.studentName,
+                        role = com.example.data.models.UserRole.STUDENT,
+                        size = 44.dp
+                    )
 
                     Spacer(modifier = Modifier.width(12.dp))
 
@@ -312,12 +321,17 @@ fun DigitalGatePassCard(outpass: Outpass) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Dynamic Encrypted QR Code Canvas Box with Expired Overlay if Used
+            val portableQrToken = remember(outpass.id, outpass.status, outpass.qrToken) {
+                if (outpass.qrToken.startsWith("VETIAS_PASS_V1::")) outpass.qrToken
+                else com.example.data.models.OutpassQrHelper.encodeToQr(outpass)
+            }
+
+            // Dynamic Encrypted QR Code Canvas Box with Expired Overlay if Used or 1-Hour Passed
             Box(contentAlignment = Alignment.Center) {
                 QrCodeCanvas(
-                    qrData = outpass.qrToken,
-                    size = 180.dp,
-                    showScanAnimation = outpass.status == OutpassStatus.APPROVED && !outpass.isQrUsed
+                    qrData = portableQrToken,
+                    size = 210.dp,
+                    showScanAnimation = false
                 )
 
                 if (outpass.isQrUsed || outpass.status == OutpassStatus.CHECKED_OUT || outpass.status == OutpassStatus.CHECKED_IN) {
@@ -352,6 +366,39 @@ fun DigitalGatePassCard(outpass: Outpass) {
                             )
                         }
                     }
+                } else if (isQrValidityExpired) {
+                    Box(
+                        modifier = Modifier
+                            .size(180.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.Black.copy(alpha = 0.85f))
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(CrimsonError)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "QR CODE EXPIRED",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "1-Hour Gate Window Ended\nPlease request new pass",
+                                fontSize = 10.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
                 }
             }
 
@@ -382,30 +429,60 @@ fun DigitalGatePassCard(outpass: Outpass) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Live Countdown Timer Pill
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(30.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .border(1.dp, IndigoPrimary.copy(alpha = 0.5f), RoundedCornerShape(30.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            // 1-Hour QR Code Validity Window Badge
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = if (isQrValidityExpired) CrimsonError.copy(alpha = 0.15f) else EmeraldSuccess.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, if (isQrValidityExpired) CrimsonError else EmeraldSuccess)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Timer, contentDescription = null, tint = EmeraldSuccess, modifier = Modifier.size(18.dp))
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isQrValidityExpired) Icons.Default.Info else Icons.Default.Timer,
+                        contentDescription = null,
+                        tint = if (isQrValidityExpired) CrimsonError else EmeraldSuccess,
+                        modifier = Modifier.size(16.dp)
+                    )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Valid Time Remaining: ",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = remainingTimeText,
-                        style = MaterialTheme.typography.labelSmall,
+                        text = if (isQrValidityExpired) "QR Status: EXPIRED (1-Hour Limit)" else "QR Active: $qrTimeRemainingText (1-Hour Limit)",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = EmeraldSuccess
+                        color = if (isQrValidityExpired) CrimsonError else EmeraldSuccess
                     )
+                }
+            }
+
+            if (outpass.type != OutpassType.HOME) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Trip Return Countdown Timer Pill (Only for Local Pass)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(30.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(1.dp, IndigoPrimary.copy(alpha = 0.5f), RoundedCornerShape(30.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.Alarm, contentDescription = null, tint = IndigoPrimary, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Campus Return Deadline: ",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = remainingTimeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = IndigoPrimary
+                        )
+                    }
                 }
             }
 

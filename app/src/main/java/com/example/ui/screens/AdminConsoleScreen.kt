@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.example.ui.components.UserAvatar
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
@@ -361,30 +362,12 @@ private fun AdminUserDirectoryCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(GreenContainer)
-                            .border(1.dp, GreenPrimary.copy(alpha = 0.4f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (user.photoUri != null) {
-                            AsyncImage(
-                                model = user.photoUri,
-                                contentDescription = user.name,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = GreenDark,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+                    UserAvatar(
+                        photoUri = user.photoUri,
+                        name = user.name,
+                        role = user.role,
+                        size = 42.dp
+                    )
 
                     Spacer(modifier = Modifier.width(10.dp))
 

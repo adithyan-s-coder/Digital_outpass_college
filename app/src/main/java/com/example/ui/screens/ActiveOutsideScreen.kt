@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.models.Outpass
 import com.example.ui.components.GreenAnimatedButton
+import com.example.ui.components.UserAvatar
 import com.example.ui.theme.AmberWarning
 import com.example.ui.theme.CrimsonError
 import com.example.ui.theme.EmeraldSuccess
@@ -182,20 +183,36 @@ private fun ActiveOutsideCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = outpass.studentName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextDark
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    UserAvatar(
+                        photoUri = outpass.studentPhotoUri,
+                        name = outpass.studentName,
+                        role = com.example.data.models.UserRole.STUDENT,
+                        size = 44.dp
                     )
-                    Text(
-                        text = "Reg: ${outpass.regNo} • ${outpass.department}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = IndigoPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = outpass.studentName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextDark
+                        )
+                        Text(
+                            text = "Reg: ${outpass.regNo} • ${outpass.department}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = IndigoPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 if (isOverdue) {
                     Box(
@@ -318,14 +335,31 @@ private fun ActiveOutsideCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            GreenAnimatedButton(
-                onClick = onCheckIn,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("1-Tap Same-Day RE-ENTRY (Campus Entry)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            if (outpass.type == com.example.data.models.OutpassType.LOCAL) {
+                GreenAnimatedButton(
+                    onClick = onCheckIn,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("1-Tap Same-Day RETURNED (Campus Entry)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Slate700.copy(alpha = 0.5f))
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Home Outpass: Student departed for home. Return gate scan is not required.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

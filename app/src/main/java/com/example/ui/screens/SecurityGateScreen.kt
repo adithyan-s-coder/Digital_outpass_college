@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import com.example.ui.components.CameraQrScannerView
+import com.example.ui.components.UserAvatar
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -81,6 +82,7 @@ import java.util.Locale
 fun SecurityGateScreen(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
+    onScanPass: (String) -> Unit = onSearchQueryChange,
     searchResults: List<Outpass>,
     gateLogs: List<GateLog>,
     onCheckOut: (String) -> Unit,
@@ -146,8 +148,8 @@ fun SecurityGateScreen(
                 } else {
                     // Real CameraX QR Code Scanner
                     CameraQrScannerView(
-                        onScanSuccess = { scannedPassId ->
-                            onSearchQueryChange(scannedPassId)
+                        onScanSuccess = { scannedPassData ->
+                            onScanPass(scannedPassData)
                             isSimulatingScanner = false
                         },
                         onCloseScanner = { isSimulatingScanner = false }
@@ -235,30 +237,12 @@ private fun GatePassSearchResultCard(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(IndigoPrimary.copy(alpha = 0.2f))
-                            .border(1.5.dp, IndigoPrimary.copy(alpha = 0.5f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (outpass.studentPhotoUri != null) {
-                            AsyncImage(
-                                model = outpass.studentPhotoUri,
-                                contentDescription = outpass.studentName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = IndigoPrimary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+                    UserAvatar(
+                        photoUri = outpass.studentPhotoUri,
+                        name = outpass.studentName,
+                        role = com.example.data.models.UserRole.STUDENT,
+                        size = 44.dp
+                    )
 
                     Spacer(modifier = Modifier.width(12.dp))
 
@@ -299,12 +283,21 @@ private fun GatePassSearchResultCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
-                    text = "Expected Return: ${df.format(Date(outpass.returnDateTime))}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = EmeraldSuccess,
-                    fontWeight = FontWeight.Bold
-                )
+                if (outpass.type == com.example.data.models.OutpassType.LOCAL) {
+                    Text(
+                        text = "Expected Return: ${df.format(Date(outpass.returnDateTime))}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = EmeraldSuccess,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else {
+                    Text(
+                        text = "Pass: Home Outpass",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = IndigoPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -329,6 +322,29 @@ private fun GatePassSearchResultCard(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.error
                             )
+                        }
+                    } else if (outpass.isQrExpired()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f))
+                                .padding(10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "QR CODE EXPIRED: 1-Hour validity window has passed.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Text(
+                                    text = "QR pass is only valid for 1 hour after approval. Gate exit denied.",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     } else {
                         GreenAnimatedButton(
@@ -355,7 +371,7 @@ private fun GatePassSearchResultCard(
                                     Icon(Icons.Default.CheckCircle, contentDescription = null, tint = GreenDark, modifier = Modifier.size(15.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Student Currently Outside Campus:",
+                                        text = if (outpass.type == com.example.data.models.OutpassType.HOME) "Student Departed Campus for Home:" else "Student Currently Outside Campus:",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = GreenDark
@@ -363,26 +379,41 @@ private fun GatePassSearchResultCard(
                                 }
                                 Spacer(modifier = Modifier.height(3.dp))
                                 Text(
-                                    text = "Exited: ${outpass.actualCheckOutTime?.let { df.format(Date(it)) } ?: "Exited"} • Expected Return: ${df.format(Date(outpass.returnDateTime))}",
+                                    text = "Exited: ${outpass.actualCheckOutTime?.let { df.format(Date(it)) } ?: "Exited"}",
                                     fontSize = 11.sp,
                                     color = TextDark
                                 )
-                                Text(
-                                    text = "If student returns to college today, tap below to record same-day re-entry.",
-                                    fontSize = 10.sp,
-                                    color = TextMuted
-                                )
+                                if (outpass.type == com.example.data.models.OutpassType.LOCAL) {
+                                    Text(
+                                        text = "Expected Return: ${df.format(Date(outpass.returnDateTime))}",
+                                        fontSize = 11.sp,
+                                        color = TextDark
+                                    )
+                                    Text(
+                                        text = "If student returns to college today, tap below to record same-day return.",
+                                        fontSize = 10.sp,
+                                        color = TextMuted
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Home Outpass: Student departed for home. Return gate scan is not required.",
+                                        fontSize = 10.sp,
+                                        color = TextMuted
+                                    )
+                                }
                             }
                         }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        GreenAnimatedButton(
-                            onClick = onCheckIn,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("1-Tap Same-Day RE-ENTRY (Student Entered Campus)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        if (outpass.type == com.example.data.models.OutpassType.LOCAL) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            GreenAnimatedButton(
+                                onClick = onCheckIn,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("1-Tap Same-Day RETURNED (Student Entered Campus)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
                         }
                     }
                 } else if (outpass.status == OutpassStatus.CHECKED_IN) {

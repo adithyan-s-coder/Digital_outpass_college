@@ -1034,11 +1034,13 @@ fun ProfilePhotoPickerField(
 ) {
     var showAdjustDialog by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            onPhotoSelected(uri.toString())
+            val permanentUri = ImageCropUtil.savePermanently(context, uri) ?: uri.toString()
+            onPhotoSelected(permanentUri)
             showAdjustDialog = true
         }
     }

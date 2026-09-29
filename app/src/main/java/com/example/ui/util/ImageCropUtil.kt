@@ -14,9 +14,41 @@ import kotlin.math.min
 object ImageCropUtil {
 
     /**
+     * Ensures an avatar storage directory exists inside persistent internal storage (filesDir).
+     * Files in filesDir are never wiped by Android OS cache clearers.
+     */
+    fun getAvatarsDir(context: Context): File {
+        val dir = File(context.filesDir, "avatars")
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        return dir
+    }
+
+    /**
+     * Immediately copies a transient content URI (e.g. from PhotoPicker) into a permanent
+     * local file in filesDir/avatars so it never expires or disappears across app restarts.
+     */
+    fun savePermanently(context: Context, sourceUri: Uri): String? {
+        return try {
+            val dir = getAvatarsDir(context)
+            val destFile = File(dir, "avatar_${System.currentTimeMillis()}.jpg")
+            context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Uri.fromFile(destFile).toString()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            sourceUri.toString()
+        }
+    }
+
+    /**
      * Crops and scales the image from [sourceUri] into a clean, square avatar.
      * Guarantees zero broken edges, zero blank margins, and proper orientation.
-     * Returns a valid local file Uri string pointing to the saved JPEG in the app's cache directory.
+     * Saves to persistent filesDir/avatars so the avatar is permanently available across app reboots.
      */
     fun cropAndSaveSquare(
         context: Context,
@@ -70,12 +102,12 @@ object ImageCropUtil {
             croppedBitmap = Bitmap.createBitmap(rotatedBitmap, left, top, squareDim, squareDim)
             finalScaledBitmap = Bitmap.createScaledBitmap(croppedBitmap, targetSize, targetSize, true)
 
-            val cacheFile = File(context.cacheDir, "avatar_${System.currentTimeMillis()}.jpg")
-            FileOutputStream(cacheFile).use { out ->
+            val destFile = File(getAvatarsDir(context), "avatar_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(destFile).use { out ->
                 finalScaledBitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
             }
 
-            Uri.fromFile(cacheFile).toString()
+            Uri.fromFile(destFile).toString()
         } catch (e: Exception) {
             e.printStackTrace()
             null

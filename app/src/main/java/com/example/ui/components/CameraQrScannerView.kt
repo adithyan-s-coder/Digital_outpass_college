@@ -179,16 +179,17 @@ fun CameraQrScannerView(
         }
 
         val imageAnalysis = ImageAnalysis.Builder()
+            .setTargetResolution(android.util.Size(1280, 720))
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
             .also { analysis ->
                 analysis.setAnalyzer(cameraExecutor) { imageProxy ->
                     processImageProxy(imageProxy, qrReader) { rawResult ->
-                        if (rawResult != lastScannedCode) {
-                            lastScannedCode = rawResult
-                            val cleanId = extractPassIdentifier(rawResult)
+                        val cleanRaw = rawResult.trim()
+                        if (cleanRaw != lastScannedCode) {
+                            lastScannedCode = cleanRaw
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onScanSuccess(cleanId)
+                            onScanSuccess(cleanRaw)
                         }
                     }
                 }
@@ -434,6 +435,37 @@ fun CameraQrScannerView(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        // 1-Tap Quick Scan Test (helps instantly test QR flow in streaming browser emulator)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Quick Test Scan (Simulator):",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Button(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onScanSuccess("PASS-1001")
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = EmeraldSuccess),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Scan PASS-1001", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
         // QR Code ID manual entry: if camera scanning is not working, security can use the generated pass code to leave
         var manualQrIdInput by remember { mutableStateOf("") }
 
@@ -514,15 +546,16 @@ private fun processImageProxy(
     try {
         val plane = imageProxy.planes[0]
         val buffer = plane.buffer
-        val bytes = ByteArray(buffer.remaining())
-        buffer.get(bytes)
-
+        val rowStride = plane.rowStride
         val width = imageProxy.width
         val height = imageProxy.height
 
+        val yBytes = ByteArray(buffer.remaining())
+        buffer.get(yBytes)
+
         val source = PlanarYUVLuminanceSource(
-            bytes,
-            width,
+            yBytes,
+            rowStride,
             height,
             0,
             0,
@@ -531,8 +564,48 @@ private fun processImageProxy(
             false
         )
 
-        val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
-        val result = reader.decodeWithState(binaryBitmap)
+        // 1. Standard orientation - HybridBinarizer
+        var binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+        var result = try {
+            reader.decodeWithState(binaryBitmap)
+        } catch (_: Exception) {
+            null
+        }
+
+        // 2. GlobalHistogramBinarizer (specialized for illuminated phone screens)
+        if (result == null) {
+            try {
+                binaryBitmap = BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(source))
+                result = reader.decodeWithState(binaryBitmap)
+            } catch (_: Exception) {}
+        }
+
+        // 3. Rotate counter-clockwise (handles portrait sensor orientations)
+        if (result == null && source.isRotateSupported) {
+            try {
+                val rotated = source.rotateCounterClockwise()
+                binaryBitmap = BinaryBitmap(HybridBinarizer(rotated))
+                result = reader.decodeWithState(binaryBitmap)
+            } catch (_: Exception) {}
+
+            if (result == null) {
+                try {
+                    val rotated = source.rotateCounterClockwise()
+                    binaryBitmap = BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(rotated))
+                    result = reader.decodeWithState(binaryBitmap)
+                } catch (_: Exception) {}
+            }
+        }
+
+        // 4. Inverted colors (for dark mode or high-contrast screens)
+        if (result == null) {
+            try {
+                val inverted = com.google.zxing.InvertedLuminanceSource(source)
+                binaryBitmap = BinaryBitmap(HybridBinarizer(inverted))
+                result = reader.decodeWithState(binaryBitmap)
+            } catch (_: Exception) {}
+        }
+
         result?.text?.let { onResult(it) }
     } catch (_: Exception) {
         // Normal frame-by-frame non-match
@@ -548,6 +621,11 @@ private fun extractPassIdentifier(rawText: String): String {
     val match = passRegex.find(clean)
     if (match != null) {
         return match.groupValues[1].uppercase()
+    }
+
+    if (clean.contains("::")) {
+        val firstToken = clean.substringBefore("::").trim()
+        if (firstToken.isNotBlank()) return firstToken
     }
 
     if (clean.startsWith("{") && clean.endsWith("}")) {

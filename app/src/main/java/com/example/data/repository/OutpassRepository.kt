@@ -14,6 +14,7 @@ import com.example.data.models.OutpassType
 import com.example.data.models.User
 import com.example.data.models.UserRole
 import com.example.data.models.DepartmentConstants
+import com.example.data.models.OutpassQrHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -271,9 +272,9 @@ class OutpassRepository {
             returnDateTime = now + (28 * hourMs),
             status = OutpassStatus.APPROVED,
             qrToken = "PASS-1001::21CS045::APPROVED::" + (now + 28 * hourMs),
-            appliedAt = now - (24 * hourMs),
-            staffApproval = ApprovalRecord(UserRole.STAFF_ADVISOR, "Dr. Robert Vance", "APPROVED", now - (18 * hourMs), "Verified family function."),
-            hodApproval = ApprovalRecord(UserRole.HOD, "Prof. Elena Rostova", "APPROVED", now - (12 * hourMs), "Granted 3-day weekend leave."),
+            appliedAt = now - (30 * 60 * 1000L),
+            staffApproval = ApprovalRecord(UserRole.STAFF_ADVISOR, "Dr. Robert Vance", "APPROVED", now - (20 * 60 * 1000L), "Verified family function."),
+            hodApproval = ApprovalRecord(UserRole.HOD, "Prof. Elena Rostova", "APPROVED", now - (15 * 60 * 1000L), "Granted weekend leave."),
             parentNotified = true,
             studentPhotoUri = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces"
         ),
@@ -632,6 +633,19 @@ class OutpassRepository {
         persistUsers()
     }
 
+    fun importScannedOutpass(pass: Outpass): Outpass {
+        val list = _outpasses.value.toMutableList()
+        val index = list.indexOfFirst { it.id.equals(pass.id, ignoreCase = true) }
+        if (index != -1) {
+            list[index] = pass
+        } else {
+            list.add(0, pass)
+        }
+        _outpasses.value = list
+        persistOutpasses()
+        return pass
+    }
+
     fun applyOutpass(
         student: User,
         type: OutpassType,
@@ -641,8 +655,7 @@ class OutpassRepository {
         returnDateTime: Long
     ): Outpass {
         val passId = "PASS-" + (1000 + _outpasses.value.size + 1)
-        val qrToken = "$passId::${student.regNo}::PENDING_STAFF::$returnDateTime"
-        val newPass = Outpass(
+        val tempPass = Outpass(
             id = passId,
             studentId = student.id,
             studentName = student.name,
@@ -658,10 +671,12 @@ class OutpassRepository {
             outDateTime = outDateTime,
             returnDateTime = returnDateTime,
             status = OutpassStatus.PENDING_STAFF,
-            qrToken = qrToken,
+            qrToken = "",
             appliedAt = System.currentTimeMillis(),
             studentPhotoUri = student.photoUri
         )
+        val qrToken = OutpassQrHelper.encodeToQr(tempPass)
+        val newPass = tempPass.copy(qrToken = qrToken)
         val list = _outpasses.value.toMutableList()
         list.add(0, newPass)
         _outpasses.value = list
@@ -681,19 +696,18 @@ class OutpassRepository {
                 pass.copy(
                     status = OutpassStatus.PENDING_HOD,
                     staffApproval = record,
-                    qrToken = "${pass.id}::${pass.regNo}::PENDING_HOD::${pass.returnDateTime}",
                     parentNotified = true
                 )
             } else if (approver.role == UserRole.HOD || approver.role == UserRole.ADMIN) {
                 pass.copy(
                     status = OutpassStatus.APPROVED,
                     hodApproval = record,
-                    qrToken = "${pass.id}::${pass.regNo}::APPROVED::${pass.returnDateTime}",
                     parentNotified = true
                 )
             } else pass
 
-            list[index] = updatedPass
+            val passWithQr = updatedPass.copy(qrToken = OutpassQrHelper.encodeToQr(updatedPass))
+            list[index] = passWithQr
             _outpasses.value = list
             persistOutpasses()
         }
@@ -727,6 +741,10 @@ class OutpassRepository {
 
         if (pass.isQrUsed || pass.status == OutpassStatus.CHECKED_OUT || pass.status == OutpassStatus.CHECKED_IN) {
             return "QR CODE EXPIRED: Exit QR code for ${pass.studentName} (${pass.regNo}) has ALREADY been scanned & used! Re-use denied."
+        }
+
+        if (pass.isQrExpired()) {
+            return "QR CODE EXPIRED: Exit denied for ${pass.studentName} (${pass.regNo}). The outpass QR code was valid for 1 hour after approval and has expired."
         }
 
         if (pass.status != OutpassStatus.APPROVED) {

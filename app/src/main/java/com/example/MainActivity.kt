@@ -265,6 +265,7 @@ fun MainApp(
                                     0 -> SecurityGateScreen(
                                         searchQuery = searchQuery,
                                         onSearchQueryChange = { viewModel.setSearchQuery(it) },
+                                        onScanPass = { viewModel.handleScannedPass(it) },
                                         searchResults = gateSearchResults,
                                         gateLogs = allGateLogs,
                                         onCheckOut = { viewModel.gateCheckOut(it) },

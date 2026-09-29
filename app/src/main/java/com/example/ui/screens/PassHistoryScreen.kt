@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.ui.components.UserAvatar
 import com.example.data.models.CompleteAiReport
 import com.example.data.models.Outpass
 import com.example.data.models.OutpassStatus
@@ -278,31 +279,12 @@ private fun HistoryPassCard(outpass: Outpass, df: SimpleDateFormat) {
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    // Student Photo / Avatar like in Student Dashboard
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(GreenContainer)
-                            .border(1.dp, GreenPrimary, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (outpass.studentPhotoUri != null) {
-                            AsyncImage(
-                                model = outpass.studentPhotoUri,
-                                contentDescription = outpass.studentName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = GreenDark,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+                    UserAvatar(
+                        photoUri = outpass.studentPhotoUri,
+                        name = outpass.studentName,
+                        role = com.example.data.models.UserRole.STUDENT,
+                        size = 42.dp
+                    )
 
                     Spacer(modifier = Modifier.width(10.dp))
 

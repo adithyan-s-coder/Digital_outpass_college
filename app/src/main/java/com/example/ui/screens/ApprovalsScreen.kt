@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
+import com.example.ui.components.UserAvatar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
@@ -267,30 +268,12 @@ private fun PendingApprovalCard(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(IndigoPrimary.copy(alpha = 0.2f))
-                            .border(1.5.dp, IndigoPrimary.copy(alpha = 0.6f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (outpass.studentPhotoUri != null) {
-                            AsyncImage(
-                                model = outpass.studentPhotoUri,
-                                contentDescription = outpass.studentName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = IndigoPrimary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
+                    UserAvatar(
+                        photoUri = outpass.studentPhotoUri,
+                        name = outpass.studentName,
+                        role = com.example.data.models.UserRole.STUDENT,
+                        size = 46.dp
+                    )
 
                     Spacer(modifier = Modifier.width(12.dp))
 

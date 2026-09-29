@@ -45,4 +45,26 @@ data class Outpass(
     val parentNotified: Boolean = false,
     val isQrUsed: Boolean = false,
     val studentPhotoUri: String? = null
-)
+) {
+    /**
+     * The QR code is issued upon final approval (or application time) and is strictly valid for 1 hour.
+     */
+    fun getQrExpiryTime(): Long {
+        val baseTime = hodApproval?.timestamp ?: staffApproval?.timestamp ?: appliedAt
+        return baseTime + 3600_000L // 1 hour validity window
+    }
+
+    /**
+     * Checks if the QR code is expired.
+     * True if already used for checkout, or if more than 1 hour has elapsed since approval.
+     */
+    fun isQrExpired(currentTimeMs: Long = System.currentTimeMillis()): Boolean {
+        if (isQrUsed) return true
+        if (status == OutpassStatus.CHECKED_OUT || status == OutpassStatus.CHECKED_IN) return true
+        if (status == OutpassStatus.APPROVED) {
+            val expiryTime = getQrExpiryTime()
+            return currentTimeMs > expiryTime
+        }
+        return false
+    }
+}

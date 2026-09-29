@@ -26,6 +26,12 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.unit.Dp
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,8 +68,6 @@ import com.example.ui.theme.*
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.unit.Dp
 
 @Composable
 fun PremiumAppLogo(
@@ -198,38 +202,12 @@ fun TopUserHeaderBar(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(IndigoPrimary.copy(alpha = 0.2f))
-                    .border(1.dp, IndigoLight.copy(alpha = 0.4f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                if (currentUser?.photoUri != null) {
-                    AsyncImage(
-                        model = currentUser.photoUri,
-                        contentDescription = "User Avatar",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(30.dp)
-                            .clip(CircleShape)
-                            .background(IndigoPrimary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = "User Avatar",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
+            UserAvatar(
+                photoUri = currentUser?.photoUri,
+                name = currentUser?.name ?: "Guest User",
+                role = currentUser?.role,
+                size = 42.dp
+            )
 
             Spacer(modifier = Modifier.width(10.dp))
 
@@ -407,3 +385,83 @@ fun appTextFieldTextStyle() = TextStyle(
     fontSize = 15.sp,
     fontWeight = FontWeight.Normal
 )
+
+/**
+ * Universal UserAvatar component that displays user photo if available.
+ * If the image is offline, fails to load, or is missing, it dynamically falls back
+ * to a stylish branded gradient avatar with user initials, ensuring profile photos
+ * are NEVER blank or invisible across any module.
+ */
+@Composable
+fun UserAvatar(
+    photoUri: String?,
+    name: String,
+    role: UserRole? = null,
+    modifier: Modifier = Modifier,
+    size: Dp = 42.dp
+) {
+    val context = LocalContext.current
+    var isImageError by remember(photoUri) { mutableStateOf(false) }
+
+    val roleColor = when (role) {
+        UserRole.STUDENT -> IndigoPrimary
+        UserRole.STAFF_ADVISOR -> EmeraldSuccess
+        UserRole.HOD -> Color(0xFF8B5CF6)
+        UserRole.SECURITY_OFFICER -> Color(0xFFF59E0B)
+        UserRole.ADMIN -> Color(0xFFEF4444)
+        null -> IndigoPrimary
+    }
+
+    val initials = remember(name) {
+        val parts = name.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }
+        if (parts.size >= 2) {
+            "${parts[0].first().uppercaseChar()}${parts[1].first().uppercaseChar()}"
+        } else if (parts.isNotEmpty()) {
+            parts[0].take(2).uppercase()
+        } else {
+            "U"
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(roleColor.copy(alpha = 0.2f))
+            .border(1.5.dp, roleColor.copy(alpha = 0.6f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!photoUri.isNullOrBlank() && !isImageError) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(photoUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "$name Avatar",
+                contentScale = ContentScale.Crop,
+                onError = { isImageError = true },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        if (photoUri.isNullOrBlank() || isImageError) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(roleColor, roleColor.copy(alpha = 0.75f))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = initials,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = (size.value * 0.38f).sp
+                )
+            }
+        }
+    }
+}

@@ -114,7 +114,34 @@ class OutpassViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setSearchQuery(query: String) {
+        val clean = query.trim()
+        if (clean.contains("VETIAS_PASS_V1::") || (clean.startsWith("{") && clean.contains("\"id\""))) {
+            handleScannedPass(clean)
+            return
+        }
         _searchQuery.value = query
+    }
+
+    fun handleScannedPass(scannedContent: String) {
+        val clean = scannedContent.trim()
+        val decoded = com.example.data.models.OutpassQrHelper.decodeFromQr(clean)
+        if (decoded != null) {
+            repository.importScannedOutpass(decoded)
+            _searchQuery.value = decoded.id
+            _userMessage.value = "Verified student pass ${decoded.id} for ${decoded.studentName} (${decoded.department})"
+        } else {
+            val passRegex = Regex("""(PASS-\d{3,6})""", RegexOption.IGNORE_CASE)
+            val match = passRegex.find(clean)
+            val cleanId = if (match != null) {
+                match.groupValues[1].uppercase()
+            } else if (clean.contains("::")) {
+                clean.substringBefore("::").trim()
+            } else {
+                clean
+            }
+            _searchQuery.value = cleanId
+            _userMessage.value = "Scanned Pass Code: $cleanId"
+        }
     }
 
     fun setStatusFilter(status: OutpassStatus?) {
