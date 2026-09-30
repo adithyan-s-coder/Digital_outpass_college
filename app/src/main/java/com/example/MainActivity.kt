@@ -137,6 +137,7 @@ fun MainApp(
             }
         }
         com.example.util.DailyHodReportScheduler.scheduleDaily410PmAlarm(context)
+        viewModel.triggerCloudSync(context)
     }
 
     LaunchedEffect(allOutpasses, allUsers) {
