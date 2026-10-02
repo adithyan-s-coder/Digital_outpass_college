@@ -89,11 +89,7 @@ object DailyHodReportScheduler {
             Log.d(TAG, "Exact 4:10 PM automated daily report alarm scheduled for: ${Date(triggerAtMillis)}")
         } catch (e: SecurityException) {
             Log.w(TAG, "Exact alarm permission restricted; falling back to standard alarm: ${e.message}")
-            try {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-            } catch (t: Throwable) {
-                Log.w(TAG, "Standard alarm scheduling notice: ${t.message}")
-            }
+            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
         }
     }
 
@@ -273,7 +269,7 @@ object DailyHodReportScheduler {
         )
 
         val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("4:10 PM Report Sent to HOD Gmail")
             .setContentText("Daily ${stats.department} report (${stats.totalRequests} passes) auto-sent to $hodEmail")
             .setStyle(
@@ -286,7 +282,7 @@ object DailyHodReportScheduler {
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
-            .addAction(R.drawable.ic_notification, "Open in Gmail", gmailPendingIntent)
+            .addAction(R.mipmap.ic_launcher, "Open in Gmail", gmailPendingIntent)
             .setAutoCancel(true)
             .build()
 

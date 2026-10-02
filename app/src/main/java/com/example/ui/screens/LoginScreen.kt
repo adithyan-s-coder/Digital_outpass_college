@@ -137,31 +137,7 @@ fun LoginScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(EmeraldSuccess.copy(alpha = 0.12f))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(EmeraldSuccess)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Cloud Synced • Multi-Device Active",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = EmeraldSuccess
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             // Standard Registered Account Login Form
             Card(
@@ -382,7 +358,7 @@ fun LoginScreen(
                             } else if (passwordInput.isBlank()) {
                                 errorMessage = "Please enter your password."
                             } else {
-                                val (success, message) = onLoginEmail(emailInput.trim(), passwordInput.trim(), selectedRole)
+                                val (success, message) = onLoginEmail(emailInput, passwordInput, selectedRole)
                                 if (success) {
                                     onLoginSuccess()
                                 } else {

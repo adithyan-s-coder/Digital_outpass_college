@@ -139,7 +139,7 @@ class ExampleUnitTest {
     }
 
     @Test
-    fun testGeminiReportServiceGracefulFallback() = runBlocking<Unit> {
+    fun testGeminiReportServiceGracefulFallback() = runBlocking {
         val stats = OutpassStatisticsCalculator.calculate(
             allRecords = samplePasses,
             preset = ReportDatePreset.THIS_WEEK,
