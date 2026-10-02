@@ -686,12 +686,9 @@ class OutpassRepository {
         // Push to cloud immediately so other mobile devices receive notifications
         CloudSyncManager.pushOutpassesToCloud(_outpasses.value)
 
-        // Trigger local notification if current user on this device is Staff or HOD
+        // Mark on this device so the student's mobile device NEVER receives a notification for their own request!
         appContext?.let { ctx: Context ->
-            val currentRole = _currentUser.value?.role
-            if (currentRole == UserRole.STAFF_ADVISOR || currentRole == UserRole.HOD) {
-                OutpassNotificationHelper.notifyStaffAndHodOnNewRequest(ctx, newPass, student)
-            }
+            CloudSyncManager.markPassAsLocalCreated(newPass.id, ctx)
         }
 
         return newPass
@@ -738,16 +735,12 @@ class OutpassRepository {
         _outpasses.value = list
         persistOutpasses()
 
-        // Push update to cloud immediately
+        // Push update to cloud immediately so remote devices receive notifications
         CloudSyncManager.pushOutpassesToCloud(_outpasses.value)
 
+        // Mark on this device so the approver does not notify themselves
         appContext?.let { ctx: Context ->
-            val student = findUserByIdentifier(pass.regNo)
-            if (newStatus == OutpassStatus.PENDING_HOD) {
-                OutpassNotificationHelper.notifyHodOnStaffApproval(ctx, updatedPass, student)
-            } else if (newStatus == OutpassStatus.APPROVED) {
-                OutpassNotificationHelper.notifyStudentOnApproval(ctx, updatedPass)
-            }
+            CloudSyncManager.markPassAsLocalCreated(pass.id, ctx)
         }
     }
 

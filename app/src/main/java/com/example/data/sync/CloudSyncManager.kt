@@ -48,6 +48,19 @@ object CloudSyncManager {
     private var isSyncing = false
     private val knownNotifiedPassIds = mutableSetOf<String>()
 
+    fun markPassAsLocalCreated(passId: String, context: Context? = null) {
+        val keys = listOf(
+            passId,
+            "STAFF_$passId",
+            "HOD_$passId",
+            "HOD_STAFF_APPROVED_$passId",
+            "STUDENT_APPROVED_$passId",
+            "STUDENT_REJECTED_$passId"
+        )
+        knownNotifiedPassIds.addAll(keys)
+        context?.let { persistNotifiedIds(it) }
+    }
+
     fun startSync(context: Context, repository: OutpassRepository) {
         val appContext = context.applicationContext
 
@@ -89,16 +102,37 @@ object CloudSyncManager {
     fun checkAndNotifyPendingForLoggedInUser(context: Context, repository: OutpassRepository, user: User) {
         if (user.role != UserRole.STAFF_ADVISOR && user.role != UserRole.HOD) return
         val currentPasses = repository.outpasses.value
-        for (pass in currentPasses) {
-            if (pass.status == OutpassStatus.PENDING_STAFF || pass.status == OutpassStatus.PENDING_HOD) {
-                val key = "${user.role.name}_${pass.id}"
-                if (!knownNotifiedPassIds.contains(key)) {
-                    knownNotifiedPassIds.add(key)
-                    persistNotifiedIds(context)
-                    val studentUser = repository.findUserByIdentifier(pass.regNo)
-                        ?: repository.findUserByIdentifier(pass.studentId)
-                    Log.i(TAG, "Dispatching notification to newly logged in ${user.role.displayName} for pass ${pass.id}")
-                    OutpassNotificationHelper.notifyStaffAndHodOnNewRequest(context, pass, studentUser)
+
+        // Staff Advisor receives notifications for requests awaiting staff approval
+        if (user.role == UserRole.STAFF_ADVISOR) {
+            for (pass in currentPasses) {
+                if (pass.status == OutpassStatus.PENDING_STAFF) {
+                    val key = "STAFF_${pass.id}"
+                    if (!knownNotifiedPassIds.contains(key)) {
+                        knownNotifiedPassIds.add(key)
+                        persistNotifiedIds(context)
+                        val studentUser = repository.findUserByIdentifier(pass.regNo)
+                            ?: repository.findUserByIdentifier(pass.studentId)
+                        Log.i(TAG, "Dispatching notification to Staff for pass ${pass.id}")
+                        OutpassNotificationHelper.notifyStaffOnNewRequest(context, pass, studentUser)
+                    }
+                }
+            }
+        }
+
+        // HOD receives notifications when outpass has been approved by staff: "The student outpass is approved by the staff"
+        if (user.role == UserRole.HOD) {
+            for (pass in currentPasses) {
+                if (pass.status == OutpassStatus.PENDING_HOD) {
+                    val key = "HOD_STAFF_APPROVED_${pass.id}"
+                    if (!knownNotifiedPassIds.contains(key)) {
+                        knownNotifiedPassIds.add(key)
+                        persistNotifiedIds(context)
+                        val studentUser = repository.findUserByIdentifier(pass.regNo)
+                            ?: repository.findUserByIdentifier(pass.studentId)
+                        Log.i(TAG, "Dispatching staff-approved notification to HOD for pass ${pass.id}")
+                        OutpassNotificationHelper.notifyHodOnStaffApproval(context, pass, studentUser)
+                    }
                 }
             }
         }
@@ -217,15 +251,17 @@ object CloudSyncManager {
                     )
 
                 // CRITICAL NOTIFICATION ROUTING RULE:
-                // Only send new outpass request notifications to Staff Advisor and HOD modules!
-                // Student module and Security module must NOT receive this outpass creation alert.
-                if (userRole == UserRole.STAFF_ADVISOR || userRole == UserRole.HOD) {
-                    val key = "${userRole.name}_${processedPass.id}"
+                // When a student requests an outpass on the student's mobile phone:
+                // - The request notification is sent ONLY to the Staff Advisor mobile device!
+                // - Do NOT show the app notification in the same student mobile!
+                // - Do NOT show the notification on HOD mobile yet (HOD gets notified only after Staff approves)!
+                if (userRole == UserRole.STAFF_ADVISOR) {
+                    val key = "STAFF_${processedPass.id}"
                     if (!knownNotifiedPassIds.contains(key)) {
                         knownNotifiedPassIds.add(key)
                         persistNotifiedIds(context)
-                        Log.i(TAG, "Dispatching Staff/HOD outpass notification: student=${processedPass.studentName}, reason=${processedPass.reason}")
-                        OutpassNotificationHelper.notifyStaffAndHodOnNewRequest(context, processedPass, studentUser)
+                        Log.i(TAG, "Dispatching Staff outpass notification: student=${processedPass.studentName}, reason=${processedPass.reason}")
+                        OutpassNotificationHelper.notifyStaffOnNewRequest(context, processedPass, studentUser)
                     }
                 }
             } else {

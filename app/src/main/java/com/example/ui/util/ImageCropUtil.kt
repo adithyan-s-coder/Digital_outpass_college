@@ -15,7 +15,7 @@ import java.io.InputStream
 
 object ImageCropUtil {
     private const val TAG = "ImageCropUtil"
-    private const val TARGET_AVATAR_SIZE = 160 // compact, high quality for avatars & fast network sync
+    private const val TARGET_AVATAR_SIZE = 800 // Crisp HD resolution for avatars, student IDs & gate passes
 
     fun getAvatarsDir(context: Context): File {
         val dir = File(context.filesDir, "avatars")
@@ -23,6 +23,34 @@ object ImageCropUtil {
             dir.mkdirs()
         }
         return dir
+    }
+
+    /**
+     * Preserves the full-resolution, correctly-oriented original photo
+     * so user can pan and zoom freely without degradation.
+     */
+    fun saveOriginalSource(context: Context, sourceUri: Uri): String? {
+        return try {
+            val bitmap = loadAndOrientBitmap(context, sourceUri) ?: return null
+            val maxDim = Math.max(bitmap.width, bitmap.height)
+            val finalBitmap = if (maxDim > 1920) {
+                val scale = 1920f / maxDim
+                val targetW = (bitmap.width * scale).toInt()
+                val targetH = (bitmap.height * scale).toInt()
+                Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
+            } else {
+                bitmap
+            }
+            val avatarsDir = getAvatarsDir(context)
+            val file = File(avatarsDir, "orig_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { out ->
+                finalBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+            }
+            Uri.fromFile(file).toString()
+        } catch (e: Exception) {
+            Log.e(TAG, "saveOriginalSource error: ${e.message}", e)
+            sourceUri.toString()
+        }
     }
 
     fun savePermanently(context: Context, sourceUri: Uri): String? {
@@ -75,7 +103,7 @@ object ImageCropUtil {
             val avatarsDir = getAvatarsDir(context)
             val file = File(avatarsDir, "${prefix}_${System.currentTimeMillis()}.jpg")
             FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
             }
             Uri.fromFile(file).toString()
         } catch (e: Exception) {
@@ -139,9 +167,9 @@ object ImageCropUtil {
                 Uri.fromFile(File(clean))
             }
             val bitmap = loadAndOrientBitmap(context, uri) ?: return null
-            val square = cropToSquare(bitmap, 1.0f, 0.5f, 0.5f, TARGET_AVATAR_SIZE)
+            val square = cropToSquare(bitmap, 1.0f, 0.5f, 0.5f, 480)
             val stream = ByteArrayOutputStream()
-            square.compress(Bitmap.CompressFormat.JPEG, 75, stream)
+            square.compress(Bitmap.CompressFormat.JPEG, 85, stream)
             val b64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
             "data:image/jpeg;base64,$b64"
         } catch (e: Exception) {
@@ -152,7 +180,7 @@ object ImageCropUtil {
 
     private fun encodeAndSave(context: Context, bitmap: Bitmap): String {
         val stream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 92, stream)
         val byteArray = stream.toByteArray()
 
         // Save to disk locally and return the file URI so Compose & Coil load it reliably
@@ -228,6 +256,7 @@ object ImageCropUtil {
         val startY = (maxOffsetY * panYPercent.coerceIn(0f, 1f)).toInt().coerceIn(0, maxOffsetY)
 
         val cropped = Bitmap.createBitmap(bitmap, startX, startY, cropSize, cropSize)
-        return Bitmap.createScaledBitmap(cropped, targetSize, targetSize, true)
+        val finalTarget = if (cropSize < targetSize) Math.max(cropSize, 400) else targetSize
+        return Bitmap.createScaledBitmap(cropped, finalTarget, finalTarget, true)
     }
 }
