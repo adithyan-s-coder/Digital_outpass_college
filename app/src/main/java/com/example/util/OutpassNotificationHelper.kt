@@ -83,7 +83,7 @@ object OutpassNotificationHelper {
                 .setSummaryText("Pending Staff/HOD Approval")
 
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID_REQUESTS)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(notificationMessage)
                 .setStyle(bigTextStyle)
@@ -132,7 +132,7 @@ object OutpassNotificationHelper {
             )
 
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID_REQUESTS)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
@@ -172,7 +172,7 @@ object OutpassNotificationHelper {
             )
 
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID_REQUESTS)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setAutoCancel(true)
@@ -211,7 +211,7 @@ object OutpassNotificationHelper {
             )
 
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID_REQUESTS)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(message)
                 .setAutoCancel(true)

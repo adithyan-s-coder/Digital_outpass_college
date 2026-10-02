@@ -179,7 +179,7 @@ class OutpassRepository {
     private val _users = MutableStateFlow(demoUsers)
     val users: StateFlow<List<User>> = _users.asStateFlow()
 
-    private val _currentUser = MutableStateFlow<User?>(demoUsers[0])
+    private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
     private val seedOutpasses = listOf(
@@ -299,46 +299,92 @@ class OutpassRepository {
         @Volatile
         private var instance: OutpassRepository? = null
 
+        @JvmStatic
         fun getInstance(context: Context? = null): OutpassRepository {
-            return instance ?: synchronized(this) {
-                instance ?: OutpassRepository().also {
-                    instance = it
+            val existing = instance
+            if (existing != null) {
+                if (context != null && existing.appContext == null) {
+                    synchronized(this) {
+                        if (existing.appContext == null) {
+                            try {
+                                existing.initRepository(context)
+                            } catch (t: Throwable) {
+                                Log.e("OutpassRepository", "Error initializing repo in getInstance: ${t.message}", t)
+                            }
+                        }
+                    }
+                }
+                return existing
+            }
+            return synchronized(this) {
+                instance ?: OutpassRepository().also { repo ->
+                    instance = repo
                     if (context != null) {
-                        it.initialize(context)
+                        try {
+                            repo.initRepository(context)
+                        } catch (t: Throwable) {
+                            Log.e("OutpassRepository", "Error initializing repo in getInstance: ${t.message}", t)
+                        }
+                    }
+                }
+            }
+        }
+
+        @JvmStatic
+        fun initialize(context: Context): OutpassRepository {
+            return getInstance(context).apply {
+                if (appContext == null) {
+                    try {
+                        initRepository(context)
+                    } catch (t: Throwable) {
+                        Log.e("OutpassRepository", "Error in initialize: ${t.message}", t)
                     }
                 }
             }
         }
     }
 
-    fun initialize(context: Context) {
+    fun initRepository(context: Context) {
         val appCtx = context.applicationContext
         this.appContext = appCtx
 
-        val savedUsers = LocalBackupStorage.loadUsers(appCtx)
-        if (!savedUsers.isNullOrEmpty()) {
-            _users.value = savedUsers
-            _currentUser.value = savedUsers[0]
-        } else {
+        try {
+            val savedUsers = LocalBackupStorage.loadUsers(appCtx)
+            if (!savedUsers.isNullOrEmpty()) {
+                _users.value = savedUsers
+            } else {
+                _users.value = demoUsers
+                LocalBackupStorage.saveUsers(appCtx, demoUsers)
+            }
+        } catch (t: Throwable) {
+            Log.e("OutpassRepository", "Error loading saved users: ${t.message}", t)
             _users.value = demoUsers
-            _currentUser.value = demoUsers[0]
-            LocalBackupStorage.saveUsers(appCtx, demoUsers)
         }
 
-        val savedPasses = LocalBackupStorage.loadOutpasses(appCtx)
-        if (!savedPasses.isNullOrEmpty()) {
-            _outpasses.value = savedPasses
-        } else {
+        try {
+            val savedPasses = LocalBackupStorage.loadOutpasses(appCtx)
+            if (!savedPasses.isNullOrEmpty()) {
+                _outpasses.value = savedPasses
+            } else {
+                _outpasses.value = seedOutpasses
+                LocalBackupStorage.saveOutpasses(appCtx, seedOutpasses)
+            }
+        } catch (t: Throwable) {
+            Log.e("OutpassRepository", "Error loading outpasses: ${t.message}", t)
             _outpasses.value = seedOutpasses
-            LocalBackupStorage.saveOutpasses(appCtx, seedOutpasses)
         }
 
-        val savedLogs = LocalBackupStorage.loadGateLogs(appCtx)
-        if (!savedLogs.isNullOrEmpty()) {
-            _gateLogs.value = savedLogs
-        } else {
+        try {
+            val savedLogs = LocalBackupStorage.loadGateLogs(appCtx)
+            if (!savedLogs.isNullOrEmpty()) {
+                _gateLogs.value = savedLogs
+            } else {
+                _gateLogs.value = seedGateLogs
+                LocalBackupStorage.saveGateLogs(appCtx, seedGateLogs)
+            }
+        } catch (t: Throwable) {
+            Log.e("OutpassRepository", "Error loading gate logs: ${t.message}", t)
             _gateLogs.value = seedGateLogs
-            LocalBackupStorage.saveGateLogs(appCtx, seedGateLogs)
         }
 
         // Room DB sync
@@ -347,13 +393,17 @@ class OutpassRepository {
                 val db = AppDatabase.getDatabase(appCtx)
                 _users.value.forEach { db.userDao().insertUser(UserEntity.fromUser(it)) }
                 _outpasses.value.forEach { db.outpassDao().insertOutpass(OutpassEntity.fromOutpass(it)) }
-            } catch (e: Exception) {
-                Log.w("OutpassRepository", "Room sync init notice: ${e.message}")
+            } catch (t: Throwable) {
+                Log.w("OutpassRepository", "Room sync init notice: ${t.message}")
             }
         }
 
         // Start real-time multi-device cloud sync
-        CloudSyncManager.startSync(appCtx, this)
+        try {
+            CloudSyncManager.startSync(appCtx, this)
+        } catch (t: Throwable) {
+            Log.e("OutpassRepository", "Error starting cloud sync: ${t.message}", t)
+        }
     }
 
     fun persistUsers() {
@@ -363,8 +413,8 @@ class OutpassRepository {
             try {
                 val db = AppDatabase.getDatabase(ctx)
                 _users.value.forEach { db.userDao().insertUser(UserEntity.fromUser(it)) }
-            } catch (e: Exception) {
-                Log.w("OutpassRepository", "Room user persist error: ${e.message}")
+            } catch (t: Throwable) {
+                Log.w("OutpassRepository", "Room user persist error: ${t.message}")
             }
         }
         CloudSyncManager.pushUsersToCloud(ctx, _users.value)
@@ -377,8 +427,8 @@ class OutpassRepository {
             try {
                 val db = AppDatabase.getDatabase(ctx)
                 _outpasses.value.forEach { db.outpassDao().insertOutpass(OutpassEntity.fromOutpass(it)) }
-            } catch (e: Exception) {
-                Log.w("OutpassRepository", "Room outpass persist error: ${e.message}")
+            } catch (t: Throwable) {
+                Log.w("OutpassRepository", "Room outpass persist error: ${t.message}")
             }
         }
         CloudSyncManager.pushOutpassesToCloud(_outpasses.value)
@@ -392,8 +442,8 @@ class OutpassRepository {
             try {
                 val db = AppDatabase.getDatabase(ctx)
                 syncedUsers.forEach { db.userDao().insertUser(UserEntity.fromUser(it)) }
-            } catch (e: Exception) {
-                Log.w("OutpassRepository", "Room sync error: ${e.message}")
+            } catch (t: Throwable) {
+                Log.w("OutpassRepository", "Room sync error: ${t.message}")
             }
         }
     }
@@ -406,8 +456,8 @@ class OutpassRepository {
             try {
                 val db = AppDatabase.getDatabase(ctx)
                 syncedOutpasses.forEach { db.outpassDao().insertOutpass(OutpassEntity.fromOutpass(it)) }
-            } catch (e: Exception) {
-                Log.w("OutpassRepository", "Room sync error: ${e.message}")
+            } catch (t: Throwable) {
+                Log.w("OutpassRepository", "Room sync error: ${t.message}")
             }
         }
     }
@@ -571,6 +621,21 @@ class OutpassRepository {
         return Pair(true, "Account created successfully!")
     }
 
+    fun registerUser(user: User) {
+        registerNewMember(user)
+    }
+
+    fun applyOutpass(
+        student: User,
+        type: OutpassType,
+        destination: String,
+        reason: String,
+        outDateTime: Long,
+        returnDateTime: Long
+    ): Outpass {
+        return createOutpass(student, type, destination, reason, outDateTime, returnDateTime)
+    }
+
     fun createOutpass(
         student: User,
         type: OutpassType,
@@ -719,10 +784,10 @@ class OutpassRepository {
         }
     }
 
-    fun checkOutGate(passId: String, officerName: String): Boolean {
+    fun checkOutGate(passId: String, officerName: String): String {
         val list = _outpasses.value.toMutableList()
         val index = list.indexOfFirst { it.id.equals(passId, ignoreCase = true) }
-        if (index == -1) return false
+        if (index == -1) return "Outpass $passId not found."
 
         val pass = list[index]
         val updated = pass.copy(
@@ -733,6 +798,9 @@ class OutpassRepository {
         list[index] = updated
         _outpasses.value = list
         persistOutpasses()
+
+        // Push update to cloud immediately
+        CloudSyncManager.pushOutpassesToCloud(_outpasses.value)
 
         val log = GateLog(
             id = "log-${System.currentTimeMillis() % 100000}",
@@ -748,13 +816,13 @@ class OutpassRepository {
         logs.add(0, log)
         _gateLogs.value = logs
         persistGateLogs()
-        return true
+        return "Student ${pass.studentName} (${pass.regNo}) successfully checked out at gate."
     }
 
-    fun checkInGate(passId: String, officerName: String, isSameDayReentry: Boolean = true): Boolean {
+    fun checkInGate(passId: String, officerName: String, isSameDayReentry: Boolean = true): String {
         val list = _outpasses.value.toMutableList()
         val index = list.indexOfFirst { it.id.equals(passId, ignoreCase = true) }
-        if (index == -1) return false
+        if (index == -1) return "Outpass $passId not found."
 
         val pass = list[index]
         val updated = pass.copy(
@@ -764,6 +832,9 @@ class OutpassRepository {
         list[index] = updated
         _outpasses.value = list
         persistOutpasses()
+
+        // Push update to cloud immediately
+        CloudSyncManager.pushOutpassesToCloud(_outpasses.value)
 
         val log = GateLog(
             id = "log-${System.currentTimeMillis() % 100000}",
@@ -779,18 +850,22 @@ class OutpassRepository {
         logs.add(0, log)
         _gateLogs.value = logs
         persistGateLogs()
-        return true
+        return "Student ${pass.studentName} (${pass.regNo}) successfully checked in at gate."
     }
 
-    fun importScannedOutpass(pass: Outpass) {
+    fun importScannedOutpass(pass: Outpass): Outpass {
         val list = _outpasses.value.toMutableList()
         val index = list.indexOfFirst { it.id.equals(pass.id, ignoreCase = true) }
-        if (index == -1) {
+        val finalPass = if (index == -1) {
             list.add(0, pass)
+            pass
         } else {
             list[index] = pass
+            pass
         }
         _outpasses.value = list
         persistOutpasses()
+        CloudSyncManager.pushOutpassesToCloud(_outpasses.value)
+        return finalPass
     }
 }
