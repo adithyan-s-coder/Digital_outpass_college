@@ -44,6 +44,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -231,7 +232,16 @@ fun MainApp(
             }
 
             Scaffold(
-                snackbarHost = { SnackbarHost(snackbarHostState) },
+                snackbarHost = {
+                    SnackbarHost(snackbarHostState) { data ->
+                        Snackbar(
+                            snackbarData = data,
+                            containerColor = androidx.compose.ui.graphics.Color(0xFF1E293B),
+                            contentColor = androidx.compose.ui.graphics.Color.White,
+                            actionColor = com.example.ui.theme.GreenPrimary
+                        )
+                    }
+                },
                 topBar = {
                     TopAppBar(
                         title = {
