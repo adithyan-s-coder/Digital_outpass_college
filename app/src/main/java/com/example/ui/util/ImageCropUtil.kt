@@ -4,19 +4,19 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
-import android.media.ExifInterface
 import android.net.Uri
+import android.util.Base64
+import android.util.Log
+import androidx.exifinterface.media.ExifInterface
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
-import kotlin.math.min
 
 object ImageCropUtil {
+    private const val TAG = "ImageCropUtil"
+    private const val TARGET_AVATAR_SIZE = 160 // compact, high quality for avatars & fast network sync
 
-    /**
-     * Ensures an avatar storage directory exists inside persistent internal storage (filesDir).
-     * Files in filesDir are never wiped by Android OS cache clearers.
-     */
     fun getAvatarsDir(context: Context): File {
         val dir = File(context.filesDir, "avatars")
         if (!dir.exists()) {
@@ -25,124 +25,143 @@ object ImageCropUtil {
         return dir
     }
 
-    /**
-     * Immediately copies a transient content URI (e.g. from PhotoPicker) into a permanent
-     * local file in filesDir/avatars so it never expires or disappears across app restarts.
-     */
     fun savePermanently(context: Context, sourceUri: Uri): String? {
         return try {
-            val dir = getAvatarsDir(context)
-            val destFile = File(dir, "avatar_${System.currentTimeMillis()}.jpg")
-            context.contentResolver.openInputStream(sourceUri)?.use { input ->
-                FileOutputStream(destFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-            Uri.fromFile(destFile).toString()
+            val bitmap = loadAndOrientBitmap(context, sourceUri) ?: return null
+            val squareBitmap = cropToSquare(bitmap, 1.0f, 0.5f, 0.5f, TARGET_AVATAR_SIZE)
+            encodeAndSave(context, squareBitmap)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "savePermanently error: ${e.message}", e)
             sourceUri.toString()
         }
     }
 
-    /**
-     * Crops and scales the image from [sourceUri] into a clean, square avatar.
-     * Guarantees zero broken edges, zero blank margins, and proper orientation.
-     * Saves to persistent filesDir/avatars so the avatar is permanently available across app reboots.
-     */
     fun cropAndSaveSquare(
         context: Context,
         sourceUri: Uri,
-        zoom: Float, // >= 1.0f
-        panXPercent: Float, // -1.0f .. 1.0f
-        panYPercent: Float, // -1.0f .. 1.0f
-        targetSize: Int = 512
+        zoom: Float,
+        panXPercent: Float,
+        panYPercent: Float,
+        targetSize: Int = TARGET_AVATAR_SIZE
     ): String? {
-        var inputStream: InputStream? = null
-        var originalBitmap: Bitmap? = null
-        var rotatedBitmap: Bitmap? = null
-        var croppedBitmap: Bitmap? = null
-        var finalScaledBitmap: Bitmap? = null
-
         return try {
-            inputStream = context.contentResolver.openInputStream(sourceUri) ?: return null
-            originalBitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream.close()
-            inputStream = null
-
-            if (originalBitmap == null) return null
-
-            // Handle EXIF orientation from device camera photos
-            rotatedBitmap = fixOrientation(context, sourceUri, originalBitmap)
-
-            val width = rotatedBitmap.width
-            val height = rotatedBitmap.height
-
-            // Base square dimension is the smallest dimension of the image
-            val baseDimension = min(width, height).toFloat()
-            val effectiveZoom = zoom.coerceIn(1.0f, 5.0f)
-            val cropDimension = (baseDimension / effectiveZoom).coerceIn(20f, baseDimension)
-
-            // Available pan slack in pixels
-            val maxSlackX = (width - cropDimension) / 2f
-            val maxSlackY = (height - cropDimension) / 2f
-
-            val clampedPanX = panXPercent.coerceIn(-1.0f, 1.0f)
-            val clampedPanY = panYPercent.coerceIn(-1.0f, 1.0f)
-
-            val centerX = (width / 2f) - (clampedPanX * maxSlackX)
-            val centerY = (height / 2f) - (clampedPanY * maxSlackY)
-
-            val left = (centerX - (cropDimension / 2f)).toInt().coerceIn(0, (width - cropDimension.toInt()).coerceAtLeast(0))
-            val top = (centerY - (cropDimension / 2f)).toInt().coerceIn(0, (height - cropDimension.toInt()).coerceAtLeast(0))
-            val cropW = cropDimension.toInt().coerceAtMost(width - left)
-            val cropH = cropDimension.toInt().coerceAtMost(height - top)
-            val squareDim = min(cropW, cropH).coerceAtLeast(1)
-
-            croppedBitmap = Bitmap.createBitmap(rotatedBitmap, left, top, squareDim, squareDim)
-            finalScaledBitmap = Bitmap.createScaledBitmap(croppedBitmap, targetSize, targetSize, true)
-
-            val destFile = File(getAvatarsDir(context), "avatar_${System.currentTimeMillis()}.jpg")
-            FileOutputStream(destFile).use { out ->
-                finalScaledBitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
-            }
-
-            Uri.fromFile(destFile).toString()
+            val bitmap = loadAndOrientBitmap(context, sourceUri) ?: return null
+            val cropped = cropToSquare(bitmap, zoom, panXPercent, panYPercent, targetSize)
+            encodeAndSave(context, cropped)
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "cropAndSaveSquare error: ${e.message}", e)
             null
-        } finally {
-            try {
-                inputStream?.close()
-            } catch (_: Exception) {}
-            if (rotatedBitmap != null && rotatedBitmap != originalBitmap) {
-                rotatedBitmap.recycle()
-            }
-            originalBitmap?.recycle()
-            if (croppedBitmap != null && croppedBitmap != finalScaledBitmap) {
-                croppedBitmap.recycle()
-            }
-            finalScaledBitmap?.recycle()
         }
     }
 
-    private fun fixOrientation(context: Context, uri: Uri, bitmap: Bitmap): Bitmap {
+    fun decodeBase64ToBitmap(base64Str: String): Bitmap? {
         return try {
-            val input = context.contentResolver.openInputStream(uri) ?: return bitmap
-            val exif = ExifInterface(input)
-            val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            val clean = if (base64Str.contains(",")) {
+                base64Str.substringAfter(",")
+            } else {
+                base64Str
+            }.trim()
+            val bytes = Base64.decode(clean, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (e: Exception) {
+            Log.w(TAG, "decodeBase64ToBitmap error: ${e.message}")
+            null
+        }
+    }
+
+    fun saveBase64ToDisk(context: Context, base64Str: String, prefix: String): String? {
+        return try {
+            val bitmap = decodeBase64ToBitmap(base64Str) ?: return null
+            val avatarsDir = getAvatarsDir(context)
+            val file = File(avatarsDir, "${prefix}_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
+            }
+            Uri.fromFile(file).toString()
+        } catch (e: Exception) {
+            Log.e(TAG, "saveBase64ToDisk error: ${e.message}")
+            null
+        }
+    }
+
+    private fun encodeAndSave(context: Context, bitmap: Bitmap): String {
+        val stream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 75, stream)
+        val byteArray = stream.toByteArray()
+        val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+        val dataUri = "data:image/jpeg;base64,$base64"
+
+        // Also save to disk locally
+        try {
+            val avatarsDir = getAvatarsDir(context)
+            val file = File(avatarsDir, "avatar_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { out ->
+                out.write(byteArray)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not save local copy: ${e.message}")
+        }
+
+        return dataUri
+    }
+
+    private fun loadAndOrientBitmap(context: Context, uri: Uri): Bitmap? {
+        var input: InputStream? = null
+        return try {
+            input = context.contentResolver.openInputStream(uri) ?: return null
+            val bitmap = BitmapFactory.decodeStream(input) ?: return null
             input.close()
 
-            val matrix = Matrix()
-            when (orientation) {
-                ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
-                ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
-                ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
-                else -> return bitmap
-            }
-            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            // Check orientation
+            val exifStream = context.contentResolver.openInputStream(uri)
+            val exif = exifStream?.let { ExifInterface(it) }
+            val orientation = exif?.getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_NORMAL
+            ) ?: ExifInterface.ORIENTATION_NORMAL
+            exifStream?.close()
+
+            fixOrientation(bitmap, orientation)
         } catch (e: Exception) {
-            bitmap
+            Log.e(TAG, "loadAndOrientBitmap failed: ${e.message}", e)
+            null
+        } finally {
+            input?.close()
         }
+    }
+
+    private fun fixOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
+        val matrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+            else -> return bitmap
+        }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    private fun cropToSquare(
+        bitmap: Bitmap,
+        zoom: Float,
+        panXPercent: Float,
+        panYPercent: Float,
+        targetSize: Int
+    ): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        val minDim = Math.min(width, height)
+        val cropSize = (minDim / Math.max(1.0f, zoom)).toInt().coerceIn(1, minDim)
+
+        val maxOffsetX = width - cropSize
+        val maxOffsetY = height - cropSize
+
+        val startX = (maxOffsetX * panXPercent.coerceIn(0f, 1f)).toInt().coerceIn(0, maxOffsetX)
+        val startY = (maxOffsetY * panYPercent.coerceIn(0f, 1f)).toInt().coerceIn(0, maxOffsetY)
+
+        val cropped = Bitmap.createBitmap(bitmap, startX, startY, cropSize, cropSize)
+        return Bitmap.createScaledBitmap(cropped, targetSize, targetSize, true)
     }
 }

@@ -1,5 +1,6 @@
 package com.example.ui.viewmodels
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.models.CompleteAiReport
@@ -284,5 +285,11 @@ class OutpassViewModel(
     fun dismissAiReport() {
         _currentAiReport.value = null
         _aiReportError.value = null
+    }
+
+    fun triggerCloudSync(context: Context) {
+        viewModelScope.launch {
+            com.example.data.sync.CloudSyncManager.syncNow(context, repository)
+        }
     }
 }
