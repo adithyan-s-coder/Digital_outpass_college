@@ -44,7 +44,7 @@ object OutpassNotificationHelper {
         }
     }
 
-    fun notifyStaffAndHodOnNewRequest(context: Context, pass: Outpass, student: User?) {
+    fun notifyStaffOnNewRequest(context: Context, pass: Outpass, student: User?) {
         try {
             initializeChannels(context)
 
@@ -80,7 +80,7 @@ object OutpassNotificationHelper {
                     "• Destination: ${pass.destination}\n" +
                     "• Room: ${pass.hostelBlock} - ${pass.roomNo}"
                 )
-                .setSummaryText("Pending Staff/HOD Approval")
+                .setSummaryText("Pending Staff Advisor Approval")
 
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID_REQUESTS)
                 .setSmallIcon(R.mipmap.ic_launcher)
@@ -105,10 +105,14 @@ object OutpassNotificationHelper {
             val notificationManager = NotificationManagerCompat.from(context)
             val notificationId = (pass.id.hashCode() and 0x7FFFFFFF)
             notificationManager.notify(notificationId, notificationBuilder.build())
-            Log.i(TAG, "Successfully dispatched Staff/HOD outpass notification: $notificationMessage")
+            Log.i(TAG, "Successfully dispatched Staff outpass notification: $notificationMessage")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send outpass notification: ${e.message}", e)
         }
+    }
+
+    fun notifyStaffAndHodOnNewRequest(context: Context, pass: Outpass, student: User?) {
+        notifyStaffOnNewRequest(context, pass, student)
     }
 
     fun notifyHodOnStaffApproval(context: Context, pass: Outpass, student: User?) {
@@ -117,8 +121,10 @@ object OutpassNotificationHelper {
 
             val studentName = if (!student?.name.isNullOrBlank()) student?.name!! else pass.studentName
             val reason = if (pass.reason.isNotBlank()) pass.reason else "College Exit"
-            val title = "📋 Staff Approved • Awaiting HOD Decision"
-            val message = "the \"$studentName\" request was approved by Staff Advisor. Final HOD approval needed for \"$reason\""
+            val regNo = if (!student?.regNo.isNullOrBlank()) student?.regNo!! else pass.regNo
+            val title = "📋 Outpass Approved by Staff • ${pass.department}"
+            // Exact requested format for HOD: "The student outpass is approved by the staff"
+            val message = "The student outpass is approved by the staff"
 
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -131,13 +137,31 @@ object OutpassNotificationHelper {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
+            val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+            val bigTextStyle = NotificationCompat.BigTextStyle()
+                .setBigContentTitle(title)
+                .bigText(
+                    "$message\n\n" +
+                    "• Student: $studentName ($regNo)\n" +
+                    "• Department: ${pass.department}\n" +
+                    "• Destination: ${pass.destination}\n" +
+                    "• Reason: $reason\n\n" +
+                    "Pending your final HOD approval."
+                )
+                .setSummaryText("Pending HOD Decision")
+
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID_REQUESTS)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title)
                 .setContentText(message)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                .setStyle(bigTextStyle)
                 .setAutoCancel(true)
+                .setSound(defaultSoundUri)
+                .setVibrate(longArrayOf(0, 300, 200, 300))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_EVENT)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setContentIntent(pendingIntent)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -148,6 +172,7 @@ object OutpassNotificationHelper {
 
             val notificationManager = NotificationManagerCompat.from(context)
             notificationManager.notify((pass.id + "_hod").hashCode() and 0x7FFFFFFF, notificationBuilder.build())
+            Log.i(TAG, "Successfully dispatched HOD notification: $message for pass ${pass.id}")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send HOD approval notification: ${e.message}", e)
         }

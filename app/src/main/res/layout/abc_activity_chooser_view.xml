@@ -40,7 +40,7 @@
         android:layout_height="match_parent">
         <ImageView
             android:layout_gravity="center"
-            android:id="@+id/image"
+            android:id="@+id/image_default"
             android:layout_width="32dp"
             android:layout_height="32dp"
             android:scaleType="fitCenter"

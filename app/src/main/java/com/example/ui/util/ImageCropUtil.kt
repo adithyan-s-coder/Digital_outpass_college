@@ -4,10 +4,10 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
-import androidx.exifinterface.media.ExifInterface
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -15,7 +15,7 @@ import java.io.InputStream
 
 object ImageCropUtil {
     private const val TAG = "ImageCropUtil"
-    private const val TARGET_AVATAR_SIZE = 160 // compact, high quality for avatars & fast network sync
+    private const val TARGET_AVATAR_SIZE = 800 // Crisp HD resolution for avatars, student IDs & gate passes
 
     fun getAvatarsDir(context: Context): File {
         val dir = File(context.filesDir, "avatars")
@@ -23,6 +23,34 @@ object ImageCropUtil {
             dir.mkdirs()
         }
         return dir
+    }
+
+    /**
+     * Preserves the full-resolution, correctly-oriented original photo
+     * so user can pan and zoom freely without degradation.
+     */
+    fun saveOriginalSource(context: Context, sourceUri: Uri): String? {
+        return try {
+            val bitmap = loadAndOrientBitmap(context, sourceUri) ?: return null
+            val maxDim = Math.max(bitmap.width, bitmap.height)
+            val finalBitmap = if (maxDim > 1920) {
+                val scale = 1920f / maxDim
+                val targetW = (bitmap.width * scale).toInt()
+                val targetH = (bitmap.height * scale).toInt()
+                Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
+            } else {
+                bitmap
+            }
+            val avatarsDir = getAvatarsDir(context)
+            val file = File(avatarsDir, "orig_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(file).use { out ->
+                finalBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+            }
+            Uri.fromFile(file).toString()
+        } catch (e: Exception) {
+            Log.e(TAG, "saveOriginalSource error: ${e.message}", e)
+            sourceUri.toString()
+        }
     }
 
     fun savePermanently(context: Context, sourceUri: Uri): String? {
@@ -75,7 +103,7 @@ object ImageCropUtil {
             val avatarsDir = getAvatarsDir(context)
             val file = File(avatarsDir, "${prefix}_${System.currentTimeMillis()}.jpg")
             FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
             }
             Uri.fromFile(file).toString()
         } catch (e: Exception) {
@@ -84,25 +112,91 @@ object ImageCropUtil {
         }
     }
 
+    /**
+     * Ensures any photo representation (Base64 data URI, remote content, etc.)
+     * is materialized into a local persistent file URI on this device so Coil
+     * and Jetpack Compose can render it instantly and without permissions issues.
+     */
+    fun ensureLocalAvatarFile(context: Context, rawPhoto: String?, identifier: String): String? {
+        if (rawPhoto.isNullOrBlank()) return null
+        val clean = rawPhoto.trim()
+        if (clean.startsWith("http://") || clean.startsWith("https://")) {
+            return clean
+        }
+        if (clean.startsWith("file://")) {
+            val file = File(clean.removePrefix("file://"))
+            if (file.exists()) return clean
+        } else if (clean.startsWith("/") && File(clean).exists()) {
+            return Uri.fromFile(File(clean)).toString()
+        }
+
+        // If it's a data:image or raw base64 string
+        if (clean.startsWith("data:image/") || clean.length > 200) {
+            val saved = saveBase64ToDisk(context, clean, "avatar_${Math.abs(identifier.hashCode())}")
+            if (saved != null) return saved
+        }
+
+        // If it's a content:// uri
+        if (clean.startsWith("content://")) {
+            try {
+                val uri = Uri.parse(clean)
+                val saved = savePermanently(context, uri)
+                if (saved != null) return saved
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to copy content uri locally: ${e.message}")
+            }
+        }
+
+        return clean
+    }
+
+    /**
+     * Converts a local photo URI into a compact, portable Base64 data URI
+     * for syncing across multiple mobile devices.
+     */
+    fun convertToCompactBase64(context: Context, photoUri: String?): String? {
+        if (photoUri.isNullOrBlank()) return null
+        val clean = photoUri.trim()
+        if (clean.startsWith("data:image/")) return clean
+        if (clean.startsWith("http://") || clean.startsWith("https://")) return clean
+
+        return try {
+            val uri = if (clean.startsWith("file://") || clean.startsWith("content://")) {
+                Uri.parse(clean)
+            } else {
+                Uri.fromFile(File(clean))
+            }
+            val bitmap = loadAndOrientBitmap(context, uri) ?: return null
+            val square = cropToSquare(bitmap, 1.0f, 0.5f, 0.5f, 480)
+            val stream = ByteArrayOutputStream()
+            square.compress(Bitmap.CompressFormat.JPEG, 85, stream)
+            val b64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+            "data:image/jpeg;base64,$b64"
+        } catch (e: Exception) {
+            Log.w(TAG, "convertToCompactBase64 error: ${e.message}")
+            null
+        }
+    }
+
     private fun encodeAndSave(context: Context, bitmap: Bitmap): String {
         val stream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 75, stream)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 92, stream)
         val byteArray = stream.toByteArray()
-        val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
-        val dataUri = "data:image/jpeg;base64,$base64"
 
-        // Also save to disk locally
+        // Save to disk locally and return the file URI so Compose & Coil load it reliably
         try {
             val avatarsDir = getAvatarsDir(context)
             val file = File(avatarsDir, "avatar_${System.currentTimeMillis()}.jpg")
             FileOutputStream(file).use { out ->
                 out.write(byteArray)
             }
+            return Uri.fromFile(file).toString()
         } catch (e: Exception) {
             Log.w(TAG, "Could not save local copy: ${e.message}")
         }
 
-        return dataUri
+        val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
+        return "data:image/jpeg;base64,$base64"
     }
 
     private fun loadAndOrientBitmap(context: Context, uri: Uri): Bitmap? {
@@ -162,6 +256,7 @@ object ImageCropUtil {
         val startY = (maxOffsetY * panYPercent.coerceIn(0f, 1f)).toInt().coerceIn(0, maxOffsetY)
 
         val cropped = Bitmap.createBitmap(bitmap, startX, startY, cropSize, cropSize)
-        return Bitmap.createScaledBitmap(cropped, targetSize, targetSize, true)
+        val finalTarget = if (cropSize < targetSize) Math.max(cropSize, 400) else targetSize
+        return Bitmap.createScaledBitmap(cropped, finalTarget, finalTarget, true)
     }
 }

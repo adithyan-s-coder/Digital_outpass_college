@@ -2,7 +2,6 @@ package com.example.data.repository
 
 import android.content.Context
 import android.util.Log
-import com.example.data.local.AppDatabase
 import com.example.data.local.LocalBackupStorage
 import com.example.data.models.ApprovalRecord
 import com.example.data.models.GateLog
@@ -12,7 +11,7 @@ import com.example.data.models.OutpassType
 import com.example.data.models.User
 import com.example.data.models.UserRole
 import com.example.data.sync.CloudSyncManager
-import com.example.ui.util.OutpassQrHelper
+import com.example.data.models.OutpassQrHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -175,7 +174,7 @@ class OutpassRepository {
     private val _users = MutableStateFlow(demoUsers)
     val users: StateFlow<List<User>> = _users.asStateFlow()
 
-    private val _currentUser = MutableStateFlow<User?>(demoUsers[0])
+    private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
     private val seedOutpasses = listOf(
@@ -278,13 +277,13 @@ class OutpassRepository {
     private val seedGateLogs = listOf(
         GateLog(
             id = "log-1",
-            passId = "PASS-1003",
+            outpassId = "PASS-1003",
             studentName = "Alex Morgan",
             regNo = "21CS045",
             action = "CHECK_OUT",
             timestamp = now - (2 * hourMs),
             officerName = "Officer Ram Singh",
-            notes = "Exit scan verified at Gate 1"
+            remarks = "Exit scan verified at Gate 1"
         )
     )
 
@@ -297,10 +296,10 @@ class OutpassRepository {
 
         fun getInstance(context: Context? = null): OutpassRepository {
             return instance ?: synchronized(this) {
-                instance ?: OutpassRepository().also {
-                    instance = it
+                instance ?: OutpassRepository().also { repo ->
+                    instance = repo
                     if (context != null) {
-                        it.initialize(context)
+                        repo.initialize(context)
                     }
                 }
             }
@@ -313,7 +312,15 @@ class OutpassRepository {
         }
     }
 
+    @Volatile
+    private var isInitialized = false
+
     fun initialize(context: Context) {
+        if (isInitialized) return
+        synchronized(this) {
+            if (isInitialized) return
+            isInitialized = true
+        }
         val appCtx = context.applicationContext
         this.appContext = appCtx
 
@@ -347,17 +354,6 @@ class OutpassRepository {
             LocalBackupStorage.saveGateLogs(appCtx, seedGateLogs)
         }
 
-        // Room DB sync
-        repoScope.launch {
-            try {
-                val db = AppDatabase.getInstance(appCtx)
-                _users.value.forEach { db.userDao().insertUser(it.toEntity()) }
-                _outpasses.value.forEach { db.outpassDao().insertOutpass(it.toEntity()) }
-            } catch (e: Exception) {
-                Log.w("OutpassRepository", "Room sync init notice: ${e.message}")
-            }
-        }
-
         // Start real-time multi-device cloud sync
         CloudSyncManager.startSync(appCtx, this)
     }
@@ -365,28 +361,12 @@ class OutpassRepository {
     fun persistUsers() {
         val ctx = appContext ?: return
         LocalBackupStorage.saveUsers(ctx, _users.value)
-        repoScope.launch {
-            try {
-                val db = AppDatabase.getInstance(ctx)
-                _users.value.forEach { db.userDao().insertUser(it.toEntity()) }
-            } catch (e: Exception) {
-                Log.w("OutpassRepository", "Room user persist error: ${e.message}")
-            }
-        }
         CloudSyncManager.pushUsersToCloud(ctx, _users.value)
     }
 
     fun persistOutpasses() {
         val ctx = appContext ?: return
         LocalBackupStorage.saveOutpasses(ctx, _outpasses.value)
-        repoScope.launch {
-            try {
-                val db = AppDatabase.getInstance(ctx)
-                _outpasses.value.forEach { db.outpassDao().insertOutpass(it.toEntity()) }
-            } catch (e: Exception) {
-                Log.w("OutpassRepository", "Room outpass persist error: ${e.message}")
-            }
-        }
         CloudSyncManager.pushOutpassesToCloud(_outpasses.value)
     }
 
@@ -394,28 +374,12 @@ class OutpassRepository {
         _users.value = syncedUsers
         val ctx = appContext ?: return
         LocalBackupStorage.saveUsers(ctx, syncedUsers)
-        repoScope.launch {
-            try {
-                val db = AppDatabase.getInstance(ctx)
-                syncedUsers.forEach { db.userDao().insertUser(it.toEntity()) }
-            } catch (e: Exception) {
-                Log.w("OutpassRepository", "Room sync error: ${e.message}")
-            }
-        }
     }
 
     fun setOutpassesFromSync(syncedOutpasses: List<Outpass>) {
         _outpasses.value = syncedOutpasses
         val ctx = appContext ?: return
         LocalBackupStorage.saveOutpasses(ctx, syncedOutpasses)
-        repoScope.launch {
-            try {
-                val db = AppDatabase.getInstance(ctx)
-                syncedOutpasses.forEach { db.outpassDao().insertOutpass(it.toEntity()) }
-            } catch (e: Exception) {
-                Log.w("OutpassRepository", "Room sync error: ${e.message}")
-            }
-        }
     }
 
     fun persistGateLogs() {
@@ -425,6 +389,9 @@ class OutpassRepository {
 
     fun setCurrentUser(user: User) {
         _currentUser.value = user
+        appContext?.let { ctx ->
+            CloudSyncManager.checkAndDispatchRoleNotifications(ctx, this)
+        }
     }
 
     fun logout() {
@@ -434,6 +401,9 @@ class OutpassRepository {
     fun loginDemoRole(role: UserRole) {
         val user = _users.value.firstOrNull { it.role == role } ?: demoUsers.first { it.role == role }
         _currentUser.value = user
+        appContext?.let { ctx ->
+            CloudSyncManager.checkAndDispatchRoleNotifications(ctx, this)
+        }
     }
 
     fun login(
@@ -591,15 +561,6 @@ class OutpassRepository {
     ): Outpass {
         val passId = "PASS-${(System.currentTimeMillis() % 100000)}"
         val initialStatus = if (type == OutpassType.EMERGENCY) OutpassStatus.PENDING_HOD else OutpassStatus.PENDING_STAFF
-        val qrToken = OutpassQrHelper.generatePayload(
-            passId = passId,
-            studentId = student.id,
-            studentName = student.name,
-            regNo = student.regNo,
-            department = student.department,
-            status = initialStatus.name,
-            validUntil = returnDateTime
-        )
 
         val newPass = Outpass(
             id = passId,
@@ -617,27 +578,26 @@ class OutpassRepository {
             outDateTime = outDateTime,
             returnDateTime = returnDateTime,
             status = initialStatus,
-            qrToken = qrToken,
+            qrToken = "",
             appliedAt = System.currentTimeMillis(),
             parentNotified = type == OutpassType.EMERGENCY || type == OutpassType.HOME,
             isQrUsed = false,
             studentPhotoUri = student.photoUri
         )
+        val finalPass = newPass.copy(qrToken = OutpassQrHelper.encodeToQr(newPass))
 
         val updated = _outpasses.value.toMutableList()
-        updated.add(0, newPass)
+        updated.add(0, finalPass)
         _outpasses.value = updated
         persistOutpasses()
 
-        // Push to cloud immediately so other devices receive notifications
+        // Push to cloud immediately so staff mobile device receives the notification
         CloudSyncManager.pushOutpassesToCloud(_outpasses.value)
 
-        // Trigger local notification for testing if on the same device
-        appContext?.let { ctx ->
-            OutpassNotificationHelper.notifyStaffAndHodOnNewRequest(ctx, newPass, student)
-        }
+        // Note: As specified, do NOT show the notification in the student's mobile device.
+        // It is sent to the staff mobile phone upon sync.
 
-        return newPass
+        return finalPass
     }
 
     fun approveOutpass(passId: String, approver: User, remarks: String) {
@@ -652,7 +612,7 @@ class OutpassRepository {
         val record = ApprovalRecord(
             approverRole = approver.role,
             approverName = approver.name,
-            decision = "APPROVED",
+            status = "APPROVED",
             timestamp = System.currentTimeMillis(),
             remarks = remarks
         )
@@ -663,36 +623,19 @@ class OutpassRepository {
             else -> OutpassStatus.APPROVED
         }
 
-        val updatedQr = OutpassQrHelper.generatePayload(
-            passId = pass.id,
-            studentId = pass.studentId,
-            studentName = pass.studentName,
-            regNo = pass.regNo,
-            department = pass.department,
-            status = newStatus.name,
-            validUntil = pass.returnDateTime
-        )
-
         val updatedPass = pass.copy(
             status = newStatus,
             staffApproval = if (isStaff) record else pass.staffApproval,
             hodApproval = if (isHod) record else pass.hodApproval,
-            qrToken = updatedQr,
             isQrUsed = false
-        )
+        ).let { it.copy(qrToken = OutpassQrHelper.encodeToQr(it)) }
 
         list[index] = updatedPass
         _outpasses.value = list
         persistOutpasses()
 
-        appContext?.let { ctx ->
-            val student = findUserByIdentifier(pass.regNo)
-            if (newStatus == OutpassStatus.PENDING_HOD) {
-                OutpassNotificationHelper.notifyHodOnStaffApproval(ctx, updatedPass, student)
-            } else if (newStatus == OutpassStatus.APPROVED) {
-                OutpassNotificationHelper.notifyStudentOnApproval(ctx, updatedPass)
-            }
-        }
+        // Pushed to cloud: HOD mobile receives 'The student outpass is approved by the staff',
+        // or Student mobile receives final approval notification upon cloud sync.
     }
 
     fun rejectOutpass(passId: String, approver: User, remarks: String) {
@@ -704,7 +647,7 @@ class OutpassRepository {
         val record = ApprovalRecord(
             approverRole = approver.role,
             approverName = approver.name,
-            decision = "REJECTED",
+            status = "REJECTED",
             timestamp = System.currentTimeMillis(),
             remarks = remarks
         )
@@ -720,9 +663,7 @@ class OutpassRepository {
         _outpasses.value = list
         persistOutpasses()
 
-        appContext?.let { ctx ->
-            OutpassNotificationHelper.notifyStudentOnRejection(ctx, updatedPass, remarks)
-        }
+        // Pushed to cloud: Student mobile receives rejection notification upon cloud sync.
     }
 
     fun checkOutGate(passId: String, officerName: String): Boolean {
@@ -746,13 +687,13 @@ class OutpassRepository {
 
         val log = GateLog(
             id = "log-${System.currentTimeMillis() % 100000}",
-            passId = pass.id,
+            outpassId = pass.id,
             studentName = pass.studentName,
             regNo = pass.regNo,
             action = "CHECK_OUT",
             timestamp = System.currentTimeMillis(),
             officerName = officerName,
-            notes = "Exit scanned at gate"
+            remarks = "Exit scanned at gate"
         )
         val logs = _gateLogs.value.toMutableList()
         logs.add(0, log)
@@ -777,13 +718,13 @@ class OutpassRepository {
 
         val log = GateLog(
             id = "log-${System.currentTimeMillis() % 100000}",
-            passId = pass.id,
+            outpassId = pass.id,
             studentName = pass.studentName,
             regNo = pass.regNo,
             action = "CHECK_IN",
             timestamp = System.currentTimeMillis(),
             officerName = officerName,
-            notes = if (isSameDayReentry) "Returned safe to campus" else "Delayed re-entry verified"
+            remarks = if (isSameDayReentry) "Returned safe to campus" else "Delayed re-entry verified"
         )
         val logs = _gateLogs.value.toMutableList()
         logs.add(0, log)
