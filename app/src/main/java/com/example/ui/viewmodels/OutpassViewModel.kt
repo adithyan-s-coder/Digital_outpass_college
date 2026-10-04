@@ -227,13 +227,13 @@ class OutpassViewModel(
     fun gateCheckOut(passId: String) {
         val officerName = currentUser.value?.name ?: "Security Officer"
         val result = repository.checkOutGate(passId, officerName)
-        _userMessage.value = if (result) "Student checked out successfully at gate." else "Gate check-out failed. Please verify pass status."
+        _userMessage.value = result
     }
 
     fun gateCheckIn(passId: String) {
         val officerName = currentUser.value?.name ?: "Security Officer"
         val result = repository.checkInGate(passId, officerName)
-        _userMessage.value = if (result) "Student checked in successfully at gate." else "Gate check-in failed."
+        _userMessage.value = result
     }
 
     fun generateAiReport(

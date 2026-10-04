@@ -34,7 +34,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -78,16 +77,12 @@ fun ActiveOutsideScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 8.dp)
-            ) {
+            Column {
                 Text(
-                    text = "Students Outside Campus",
+                    text = "Students Currently Outside Campus",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    color = TextDark
                 )
                 Text(
                     text = "Real-time active gate exit monitoring",
@@ -96,34 +91,18 @@ fun ActiveOutsideScreen(
                 )
             }
 
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = if (activeOutsidePasses.isNotEmpty()) AmberWarning.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primaryContainer,
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (activeOutsidePasses.isNotEmpty()) AmberWarning.copy(alpha = 0.4f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(IndigoPrimary)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(
-                                if (activeOutsidePasses.isNotEmpty()) AmberWarning else MaterialTheme.colorScheme.primary,
-                                androidx.compose.foundation.shape.CircleShape
-                            )
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "${activeOutsidePasses.size} Active",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (activeOutsidePasses.isNotEmpty()) AmberWarning else MaterialTheme.colorScheme.primary
-                    )
-                }
+                Text(
+                    text = "${activeOutsidePasses.size} Active Outside",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
             }
         }
 
@@ -153,15 +132,12 @@ fun ActiveOutsideScreen(
                         text = "All Students Present On Campus",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        color = Color.White
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "There are currently no active student outpasses in checked-out status.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

@@ -44,9 +44,8 @@ object GeminiReportService {
 
     suspend fun analyzeStatistics(statistics: OutpassStatistics): AiAnalysisResult = withContext(Dispatchers.IO) {
         val apiKey = try {
-            val field = BuildConfig::class.java.getDeclaredField("GEMINI_API_KEY")
-            field.get(null) as? String ?: ""
-        } catch (_: Throwable) {
+            BuildConfig.GEMINI_API_KEY
+        } catch (e: Throwable) {
             ""
         }
 

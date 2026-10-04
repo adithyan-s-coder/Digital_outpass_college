@@ -18,10 +18,11 @@ import com.example.data.models.User
 
 object OutpassNotificationHelper {
     private const val TAG = "OutpassNotificationHelper"
+
     const val CHANNEL_ID_REQUESTS = "outpass_staff_hod_channel"
     const val CHANNEL_NAME_REQUESTS = "Staff & HOD Outpass Alerts"
-    const val EXTRA_PASS_ID = "extra_pass_id"
     const val EXTRA_TARGET_TAB = "extra_target_tab"
+    const val EXTRA_PASS_ID = "extra_pass_id"
 
     fun initializeChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -44,24 +45,28 @@ object OutpassNotificationHelper {
         }
     }
 
-    fun notifyStaffOnNewRequest(context: Context, pass: Outpass, student: User?) {
+    /**
+     * Dispatches an Android push notification to Staff Advisor and HOD when a student requests an outpass.
+     * Content Format strictly follows:
+     * 'the "<student name>" request the outpass for this "<reason>"'
+     */
+    fun notifyStaffAndHodOnNewRequest(context: Context, pass: Outpass, student: User) {
         try {
             initializeChannels(context)
 
-            val studentName = if (!student?.name.isNullOrBlank()) student?.name!! else pass.studentName
-            val reason = if (pass.reason.isNotBlank()) pass.reason else "College Exit"
-            val regNo = if (!student?.regNo.isNullOrBlank()) student?.regNo!! else pass.regNo
+            val studentName = student.name.ifBlank { pass.studentName }
+            val reason = pass.reason.ifBlank { "Personal work" }
 
-            // Exact requested format:
-            // "the "student name" request the outpass for this "type of reason""
+            // Requested notification message format
             val notificationMessage = "the \"$studentName\" request the outpass for this \"$reason\""
             val title = "📋 Outpass Request • ${pass.department} (${pass.type.displayName})"
 
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra(EXTRA_TARGET_TAB, 0)
+                putExtra(EXTRA_TARGET_TAB, 0) // Approvals tab
                 putExtra(EXTRA_PASS_ID, pass.id)
             }
+
             val pendingIntent = PendingIntent.getActivity(
                 context,
                 pass.id.hashCode(),
@@ -73,14 +78,8 @@ object OutpassNotificationHelper {
 
             val bigTextStyle = NotificationCompat.BigTextStyle()
                 .setBigContentTitle(title)
-                .bigText(
-                    "$notificationMessage\n\n" +
-                    "• Student: $studentName ($regNo)\n" +
-                    "• Department: ${pass.department}\n" +
-                    "• Destination: ${pass.destination}\n" +
-                    "• Room: ${pass.hostelBlock} - ${pass.roomNo}"
-                )
-                .setSummaryText("Pending Staff Advisor Approval")
+                .bigText("$notificationMessage\n\n• Student: $studentName (${student.regNo})\n• Department: ${pass.department}\n• Out Time: ${pass.outDateTime}\n• Destination: ${pass.destination}")
+                .setSummaryText("Pending Staff/HOD Approval")
 
             val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID_REQUESTS)
                 .setSmallIcon(R.mipmap.ic_launcher)
@@ -95,89 +94,29 @@ object OutpassNotificationHelper {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setContentIntent(pendingIntent)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(context, "android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                Log.w(TAG, "POST_NOTIFICATIONS permission not granted. Notification suppressed.")
-                return
+            val notificationManager = NotificationManagerCompat.from(context)
+
+            // Check permission on Android 13+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    Log.w(TAG, "POST_NOTIFICATIONS permission not granted. Notification suppressed.")
+                    return
+                }
             }
 
-            val notificationManager = NotificationManagerCompat.from(context)
-            val notificationId = (pass.id.hashCode() and 0x7FFFFFFF)
+            val notificationId = (System.currentTimeMillis() % 100000).toInt()
             notificationManager.notify(notificationId, notificationBuilder.build())
-            Log.i(TAG, "Successfully dispatched Staff outpass notification: $notificationMessage")
+            Log.i(TAG, "Successfully dispatched Staff/HOD outpass notification: $notificationMessage")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send outpass notification: ${e.message}", e)
         }
     }
 
-    fun notifyStaffAndHodOnNewRequest(context: Context, pass: Outpass, student: User?) {
-        notifyStaffOnNewRequest(context, pass, student)
-    }
-
-    fun notifyHodOnStaffApproval(context: Context, pass: Outpass, student: User?) {
-        try {
-            initializeChannels(context)
-
-            val studentName = if (!student?.name.isNullOrBlank()) student?.name!! else pass.studentName
-            val reason = if (pass.reason.isNotBlank()) pass.reason else "College Exit"
-            val regNo = if (!student?.regNo.isNullOrBlank()) student?.regNo!! else pass.regNo
-            val title = "📋 Outpass Approved by Staff • ${pass.department}"
-            // Exact requested format for HOD: "The student outpass is approved by the staff"
-            val message = "The student outpass is approved by the staff"
-
-            val intent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra(EXTRA_PASS_ID, pass.id)
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                (pass.id + "_hod").hashCode(),
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-
-            val bigTextStyle = NotificationCompat.BigTextStyle()
-                .setBigContentTitle(title)
-                .bigText(
-                    "$message\n\n" +
-                    "• Student: $studentName ($regNo)\n" +
-                    "• Department: ${pass.department}\n" +
-                    "• Destination: ${pass.destination}\n" +
-                    "• Reason: $reason\n\n" +
-                    "Pending your final HOD approval."
-                )
-                .setSummaryText("Pending HOD Decision")
-
-            val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID_REQUESTS)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle(title)
-                .setContentText(message)
-                .setStyle(bigTextStyle)
-                .setAutoCancel(true)
-                .setSound(defaultSoundUri)
-                .setVibrate(longArrayOf(0, 300, 200, 300))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setCategory(NotificationCompat.CATEGORY_EVENT)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setContentIntent(pendingIntent)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(context, "android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                return
-            }
-
-            val notificationManager = NotificationManagerCompat.from(context)
-            notificationManager.notify((pass.id + "_hod").hashCode() and 0x7FFFFFFF, notificationBuilder.build())
-            Log.i(TAG, "Successfully dispatched HOD notification: $message for pass ${pass.id}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to send HOD approval notification: ${e.message}", e)
-        }
-    }
-
+    /**
+     * Notifies student when their outpass has been approved by HOD with live QR ready.
+     */
     fun notifyStudentOnApproval(context: Context, pass: Outpass) {
         try {
             initializeChannels(context)
@@ -189,9 +128,10 @@ object OutpassNotificationHelper {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(EXTRA_PASS_ID, pass.id)
             }
+
             val pendingIntent = PendingIntent.getActivity(
                 context,
-                (pass.id + "_student").hashCode(),
+                pass.id.hashCode() + 1,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -204,55 +144,18 @@ object OutpassNotificationHelper {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setContentIntent(pendingIntent)
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(context, "android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                return
+            val notificationManager = NotificationManagerCompat.from(context)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    return
+                }
             }
 
-            val notificationManager = NotificationManagerCompat.from(context)
-            notificationManager.notify((pass.id + "_student").hashCode() and 0x7FFFFFFF, notificationBuilder.build())
+            notificationManager.notify((System.currentTimeMillis() % 100000).toInt(), notificationBuilder.build())
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send student approval notification: ${e.message}", e)
-        }
-    }
-
-    fun notifyStudentOnRejection(context: Context, pass: Outpass, remarks: String) {
-        try {
-            initializeChannels(context)
-
-            val title = "❌ Outpass ${pass.id} Not Approved"
-            val message = "Your outpass request was rejected: $remarks"
-
-            val intent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra(EXTRA_PASS_ID, pass.id)
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                (pass.id + "_reject").hashCode(),
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID_REQUESTS)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle(title)
-                .setContentText(message)
-                .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setContentIntent(pendingIntent)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(context, "android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                return
-            }
-
-            val notificationManager = NotificationManagerCompat.from(context)
-            notificationManager.notify((pass.id + "_reject").hashCode() and 0x7FFFFFFF, notificationBuilder.build())
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to send rejection notification: ${e.message}", e)
         }
     }
 }
