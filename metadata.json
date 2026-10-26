@@ -1,6 +1,6 @@
 {
   "name": "Digital Outpass",
-  "description": "Digital Outpass & Gate Management System with multi-tier approvals, live QR gate pass, role-based workflows, and gate logs.",
+  "description": "Smart College Outpass Management System with multi-device cross-sync, instant push notifications for staff and HOD, QR gate verification, and profile management.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

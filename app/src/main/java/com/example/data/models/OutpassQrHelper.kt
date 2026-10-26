@@ -48,6 +48,31 @@ object OutpassQrHelper {
         }
     }
 
+    fun generatePayload(
+        passId: String,
+        studentId: String,
+        studentName: String,
+        regNo: String,
+        department: String,
+        status: String,
+        validUntil: Long
+    ): String {
+        return try {
+            val json = JSONObject().apply {
+                put("id", passId)
+                put("studentId", studentId)
+                put("name", studentName)
+                put("regNo", regNo)
+                put("dept", department)
+                put("status", status)
+                put("retTime", validUntil)
+            }
+            PREFIX + json.toString()
+        } catch (e: Exception) {
+            passId
+        }
+    }
+
     fun decodeFromQr(rawText: String): Outpass? {
         val clean = rawText.trim()
         val jsonStr = when {

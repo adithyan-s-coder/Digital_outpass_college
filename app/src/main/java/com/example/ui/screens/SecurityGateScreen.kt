@@ -86,10 +86,155 @@ fun SecurityGateScreen(
     searchResults: List<Outpass>,
     gateLogs: List<GateLog>,
     onCheckOut: (String) -> Unit,
-    onCheckIn: (String) -> Unit
+    onCheckIn: (String) -> Unit,
+    scannedVerificationPass: Outpass? = null,
+    onDismissVerification: () -> Unit = {}
 ) {
     var isSimulatingScanner by remember { mutableStateOf(false) }
     val df = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
+
+    // Immediate Gate Verification Clearance Modal upon QR Code Scan or Direct Selection
+    if (scannedVerificationPass != null) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = onDismissVerification) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                shape = RoundedCornerShape(20.dp),
+                border = androidx.compose.foundation.BorderStroke(2.dp, EmeraldSuccess),
+                colors = CardDefaults.cardColors(containerColor = Slate900)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(EmeraldSuccess)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "PASS VERIFICATION SCAN",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    UserAvatar(
+                        photoUri = scannedVerificationPass.studentPhotoUri,
+                        name = scannedVerificationPass.studentName,
+                        role = com.example.data.models.UserRole.STUDENT,
+                        size = 64.dp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = scannedVerificationPass.studentName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+
+                    Text(
+                        text = "Reg No: ${scannedVerificationPass.regNo} • ${scannedVerificationPass.department}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    StatusBadge(status = scannedVerificationPass.status)
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Slate800)
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Pass Code:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(scannedVerificationPass.id, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = IndigoPrimary)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Destination:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(scannedVerificationPass.destination, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Outpass Type:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(scannedVerificationPass.type.displayName, fontSize = 11.sp, color = Color.White)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (scannedVerificationPass.status == OutpassStatus.APPROVED) {
+                        if (scannedVerificationPass.isQrUsed) {
+                            Text("QR Code has already been used for gate exit.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        } else if (scannedVerificationPass.isQrExpired()) {
+                            Text("QR Code has expired (1-hour window ended).", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        } else {
+                            GreenAnimatedButton(
+                                onClick = {
+                                    onCheckOut(scannedVerificationPass.id)
+                                    onDismissVerification()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("VERIFY & LOG GATE EXIT (CHECK OUT)", fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                    } else if (scannedVerificationPass.status == OutpassStatus.CHECKED_OUT) {
+                        GreenAnimatedButton(
+                            onClick = {
+                                onCheckIn(scannedVerificationPass.id)
+                                onDismissVerification()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("LOG CAMPUS RETURN (CHECK IN)", fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onDismissVerification,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Close / Done", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -148,6 +293,7 @@ fun SecurityGateScreen(
                 } else {
                     // Real CameraX QR Code Scanner
                     CameraQrScannerView(
+                        availablePasses = searchResults,
                         onScanSuccess = { scannedPassData ->
                             onScanPass(scannedPassData)
                             isSimulatingScanner = false
@@ -403,17 +549,21 @@ private fun GatePassSearchResultCard(
                                 }
                             }
                         }
-                        if (outpass.type == com.example.data.models.OutpassType.LOCAL) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            GreenAnimatedButton(
-                                onClick = onCheckIn,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("1-Tap Same-Day RETURNED (Student Entered Campus)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        GreenAnimatedButton(
+                            onClick = onCheckIn,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (outpass.type == com.example.data.models.OutpassType.HOME) "1-Tap RETURNED from Home (Check-In)"
+                                else "1-Tap Gate CHECK-IN (Student Returned to Campus)",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
                         }
                     }
                 } else if (outpass.status == OutpassStatus.CHECKED_IN) {

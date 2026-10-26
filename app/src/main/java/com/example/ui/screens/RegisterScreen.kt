@@ -1033,21 +1033,31 @@ fun ProfilePhotoPickerField(
     accentColor: Color
 ) {
     var showAdjustDialog by remember { mutableStateOf(false) }
+    var rawPhotoUri by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            val permanentUri = ImageCropUtil.savePermanently(context, uri) ?: uri.toString()
-            onPhotoSelected(permanentUri)
+            val permanentRaw = ImageCropUtil.saveOriginalSource(context, uri) ?: uri.toString()
+            rawPhotoUri = permanentRaw
+            val initialSquareCrop = ImageCropUtil.cropAndSaveSquare(
+                context = context,
+                sourceUri = Uri.parse(permanentRaw),
+                zoom = 1.0f,
+                panXPercent = 0.5f,
+                panYPercent = 0.5f,
+                targetSize = 800
+            ) ?: permanentRaw
+            onPhotoSelected(initialSquareCrop)
             showAdjustDialog = true
         }
     }
 
-    if (showAdjustDialog && selectedPhotoUri != null) {
+    if (showAdjustDialog && (rawPhotoUri != null || selectedPhotoUri != null)) {
         AdjustPhotoDialog(
-            photoUri = selectedPhotoUri,
+            photoUri = rawPhotoUri ?: selectedPhotoUri!!,
             accentColor = accentColor,
             onSaveCroppedUri = { croppedUri ->
                 onPhotoSelected(croppedUri)
@@ -1539,15 +1549,16 @@ fun AdjustPhotoDialog(
                             if (isProcessing) return@Button
                             isProcessing = true
                             coroutineScope.launch(Dispatchers.IO) {
-                                val panXRatio = if (currentMaxPan > 0f) -(tempOffsetX / currentMaxPan).coerceIn(-1f, 1f) else 0f
-                                val panYRatio = if (currentMaxPan > 0f) -(tempOffsetY / currentMaxPan).coerceIn(-1f, 1f) else 0f
+                                val panXRatio = if (currentMaxPan > 0f) 0.5f - (tempOffsetX / (currentMaxPan * 2f)) else 0.5f
+                                val panYRatio = if (currentMaxPan > 0f) 0.5f - (tempOffsetY / (currentMaxPan * 2f)) else 0.5f
 
                                 val cropped = ImageCropUtil.cropAndSaveSquare(
                                     context = context,
                                     sourceUri = Uri.parse(photoUri),
                                     zoom = tempZoom,
-                                    panXPercent = panXRatio,
-                                    panYPercent = panYRatio
+                                    panXPercent = panXRatio.coerceIn(0f, 1f),
+                                    panYPercent = panYRatio.coerceIn(0f, 1f),
+                                    targetSize = 800
                                 )
 
                                 withContext(Dispatchers.Main) {

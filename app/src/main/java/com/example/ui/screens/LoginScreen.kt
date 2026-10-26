@@ -265,6 +265,17 @@ fun LoginScreen(
                         onValueChange = {
                             emailInput = it
                             errorMessage = null
+                            val clean = it.trim()
+                            if (clean.isNotBlank()) {
+                                val match = existingUsers.firstOrNull { u ->
+                                    u.email.equals(clean, ignoreCase = true) ||
+                                    u.regNo.equals(clean, ignoreCase = true) ||
+                                    u.id.equals(clean, ignoreCase = true)
+                                }
+                                if (match != null) {
+                                    selectedRole = match.role
+                                }
+                            }
                         },
                         label = { Text(identifierLabel) },
                         placeholder = { Text(identifierPlaceholder) },

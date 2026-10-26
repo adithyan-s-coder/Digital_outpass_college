@@ -39,3 +39,6 @@ data class GateLogEntity(
         )
     }
 }
+
+fun GateLog.toEntity(): GateLogEntity = GateLogEntity.fromGateLog(this)
+

@@ -55,3 +55,6 @@ data class UserEntity(
         )
     }
 }
+
+fun User.toEntity(): UserEntity = UserEntity.fromUser(this)
+

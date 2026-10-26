@@ -90,12 +90,14 @@ import com.google.zxing.MultiFormatReader
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import java.util.concurrent.Executors
+import com.example.data.models.Outpass
 
 @Composable
 fun CameraQrScannerView(
     onScanSuccess: (String) -> Unit,
     onCloseScanner: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    availablePasses: List<Outpass> = emptyList()
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -178,16 +180,19 @@ fun CameraQrScannerView(
             setHints(hints)
         }
 
+        var lastScanTimeMs = 0L
+
         val imageAnalysis = ImageAnalysis.Builder()
-            .setTargetResolution(android.util.Size(1280, 720))
+            .setTargetResolution(android.util.Size(960, 540))
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
             .also { analysis ->
                 analysis.setAnalyzer(cameraExecutor) { imageProxy ->
                     processImageProxy(imageProxy, qrReader) { rawResult ->
                         val cleanRaw = rawResult.trim()
-                        if (cleanRaw != lastScannedCode) {
-                            lastScannedCode = cleanRaw
+                        val now = System.currentTimeMillis()
+                        if (cleanRaw.isNotBlank() && (now - lastScanTimeMs > 1200L)) {
+                            lastScanTimeMs = now
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onScanSuccess(cleanRaw)
                         }
@@ -436,31 +441,64 @@ fun CameraQrScannerView(
         Spacer(modifier = Modifier.height(10.dp))
 
         // 1-Tap Quick Scan Test (helps instantly test QR flow in streaming browser emulator)
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(vertical = 4.dp)
         ) {
             Text(
-                text = "Quick Test Scan (Simulator):",
+                text = "Quick Test Scan (Simulator / Emulator):",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
-            Button(
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onScanSuccess("PASS-1001")
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = EmeraldSuccess),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            Spacer(modifier = Modifier.height(4.dp))
+            androidx.compose.foundation.lazy.LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Scan PASS-1001", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                val passesToTest = if (availablePasses.isNotEmpty()) availablePasses.take(5) else emptyList()
+                if (passesToTest.isEmpty()) {
+                    item {
+                        Button(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onScanSuccess("PASS-1001")
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldSuccess),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Scan PASS-1001", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                } else {
+                    items(passesToTest.size) { idx ->
+                        val pass = passesToTest[idx]
+                        Button(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onScanSuccess(pass.id)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (pass.status == com.example.data.models.OutpassStatus.CHECKED_OUT) Color(0xFF38BDF8) else EmeraldSuccess
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Scan ${pass.id}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -553,7 +591,9 @@ private fun processImageProxy(
         val yBytes = ByteArray(buffer.remaining())
         buffer.get(yBytes)
 
-        val source = PlanarYUVLuminanceSource(
+        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+
+        var source: com.google.zxing.LuminanceSource = PlanarYUVLuminanceSource(
             yBytes,
             rowStride,
             height,
@@ -564,7 +604,20 @@ private fun processImageProxy(
             false
         )
 
-        // 1. Standard orientation - HybridBinarizer
+        // Apply device orientation rotation to make the camera frame upright
+        val numRotations = when (rotationDegrees) {
+            90 -> 3  // 3 * 270° = 90° clockwise
+            180 -> 2
+            270 -> 1 // 1 * 270° = 90° counter-clockwise
+            else -> 0
+        }
+        for (i in 0 until numRotations) {
+            if (source.isRotateSupported) {
+                source = source.rotateCounterClockwise()
+            }
+        }
+
+        // 1. HybridBinarizer on upright image
         var binaryBitmap = BinaryBitmap(HybridBinarizer(source))
         var result = try {
             reader.decodeWithState(binaryBitmap)
@@ -572,7 +625,7 @@ private fun processImageProxy(
             null
         }
 
-        // 2. GlobalHistogramBinarizer (specialized for illuminated phone screens)
+        // 2. GlobalHistogramBinarizer on upright image (specialized for illuminated phone screens)
         if (result == null) {
             try {
                 binaryBitmap = BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(source))
@@ -580,18 +633,18 @@ private fun processImageProxy(
             } catch (_: Exception) {}
         }
 
-        // 3. Rotate counter-clockwise (handles portrait sensor orientations)
-        if (result == null && source.isRotateSupported) {
+        // 3. Fallback: try unrotated original if sensor was already upright
+        if (result == null && numRotations > 0) {
             try {
-                val rotated = source.rotateCounterClockwise()
-                binaryBitmap = BinaryBitmap(HybridBinarizer(rotated))
+                val origSource = PlanarYUVLuminanceSource(yBytes, rowStride, height, 0, 0, width, height, false)
+                binaryBitmap = BinaryBitmap(HybridBinarizer(origSource))
                 result = reader.decodeWithState(binaryBitmap)
             } catch (_: Exception) {}
 
             if (result == null) {
                 try {
-                    val rotated = source.rotateCounterClockwise()
-                    binaryBitmap = BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(rotated))
+                    val origSource = PlanarYUVLuminanceSource(yBytes, rowStride, height, 0, 0, width, height, false)
+                    binaryBitmap = BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(origSource))
                     result = reader.decodeWithState(binaryBitmap)
                 } catch (_: Exception) {}
             }

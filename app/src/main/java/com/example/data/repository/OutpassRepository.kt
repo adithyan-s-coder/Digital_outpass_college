@@ -750,13 +750,15 @@ class OutpassRepository {
         val list = _outpasses.value.toMutableList()
         val index = list.indexOfFirst { it.id.equals(pass.id, ignoreCase = true) }
         if (index != -1) {
-            list[index] = pass
+            // Already present locally with live status (like CHECKED_OUT or CHECKED_IN).
+            // Preserve live state rather than overwriting with static QR snapshot!
+            return list[index]
         } else {
             list.add(0, pass)
+            _outpasses.value = list
+            persistOutpasses()
+            return pass
         }
-        _outpasses.value = list
-        persistOutpasses()
-        return pass
     }
 
     fun applyOutpass(
@@ -791,8 +793,23 @@ class OutpassRepository {
         val qrToken = OutpassQrHelper.encodeToQr(tempPass)
         val newPass = tempPass.copy(qrToken = qrToken)
         val list = _outpasses.value.toMutableList()
-        list.add(0, newPass)
-        _outpasses.value = list
+
+        // Auto-close any prior CHECKED_OUT pass for this student so they are recorded as returned before starting a new cycle
+        val updatedList = list.map { existing ->
+            if ((existing.studentId == student.id || existing.regNo.equals(student.regNo, ignoreCase = true)) &&
+                existing.status == OutpassStatus.CHECKED_OUT) {
+                existing.copy(
+                    status = OutpassStatus.CHECKED_IN,
+                    actualCheckInTime = System.currentTimeMillis(),
+                    isQrUsed = true
+                )
+            } else {
+                existing
+            }
+        }.toMutableList()
+
+        updatedList.add(0, newPass)
+        _outpasses.value = updatedList
         persistOutpasses()
 
         // Send instant push notification to Staff Advisor and HOD

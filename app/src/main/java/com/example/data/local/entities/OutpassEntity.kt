@@ -122,3 +122,6 @@ data class OutpassEntity(
         )
     }
 }
+
+fun Outpass.toEntity(): OutpassEntity = OutpassEntity.fromOutpass(this)
+

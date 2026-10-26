@@ -335,31 +335,20 @@ private fun ActiveOutsideCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (outpass.type == com.example.data.models.OutpassType.LOCAL) {
-                GreenAnimatedButton(
-                    onClick = onCheckIn,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("1-Tap Same-Day RETURNED (Campus Entry)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Slate700.copy(alpha = 0.5f))
-                        .padding(8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Home Outpass: Student departed for home. Return gate scan is not required.",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            GreenAnimatedButton(
+                onClick = onCheckIn,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (outpass.type == com.example.data.models.OutpassType.HOME) "1-Tap RETURNED from Home (Campus Entry)"
+                    else "1-Tap Gate CHECK-IN (Campus Entry)",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
             }
         }
     }

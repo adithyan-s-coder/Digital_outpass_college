@@ -120,6 +120,7 @@ fun MainApp(
     val currentAiReport by viewModel.currentAiReport.collectAsState()
     val isGeneratingAiReport by viewModel.isGeneratingReport.collectAsState()
     val aiReportError by viewModel.aiReportError.collectAsState()
+    val scannedPassForVerification by viewModel.scannedPassForVerification.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -224,7 +225,8 @@ fun MainApp(
                                         currentUser = currentUser,
                                         activePass = activeStudentPass,
                                         recentPasses = studentOutpasses,
-                                        onApplyClick = { currentBottomTab = 1 }
+                                        onApplyClick = { currentBottomTab = 1 },
+                                        onSelectPass = { viewModel.selectStudentPass(it) }
                                     )
                                     1 -> ApplyOutpassScreen(
                                         currentUser = currentUser,
@@ -286,7 +288,9 @@ fun MainApp(
                                         searchResults = gateSearchResults,
                                         gateLogs = allGateLogs,
                                         onCheckOut = { viewModel.gateCheckOut(it) },
-                                        onCheckIn = { viewModel.gateCheckIn(it) }
+                                        onCheckIn = { viewModel.gateCheckIn(it) },
+                                        scannedVerificationPass = scannedPassForVerification,
+                                        onDismissVerification = { viewModel.dismissScannedVerification() }
                                     )
                                     1 -> ActiveOutsideScreen(
                                         activeOutsidePasses = activeOutsideStudents,

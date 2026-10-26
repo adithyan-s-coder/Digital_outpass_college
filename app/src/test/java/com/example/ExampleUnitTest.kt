@@ -79,14 +79,14 @@ class ExampleUnitTest {
             type = OutpassType.LOCAL,
             destination = "Hospital",
             reason = "Medical checkup",
-            outDateTime = now - 6 * hourMs,
-            returnDateTime = now - 2 * hourMs,
+            outDateTime = now - 45 * 60 * 1000L,
+            returnDateTime = now - 20 * 60 * 1000L,
             status = OutpassStatus.CHECKED_IN,
             qrToken = "token3",
-            appliedAt = now - 8 * hourMs,
-            staffApproval = ApprovalRecord(UserRole.STAFF_ADVISOR, "Dr. Vance", "APPROVED", now - 7 * hourMs),
-            actualCheckOutTime = now - 5 * hourMs,
-            actualCheckInTime = now - 1 * hourMs // Returned 1 hour late
+            appliedAt = now - 50 * 60 * 1000L,
+            staffApproval = ApprovalRecord(UserRole.STAFF_ADVISOR, "Dr. Vance", "APPROVED", now - 48 * 60 * 1000L),
+            actualCheckOutTime = now - 40 * 60 * 1000L,
+            actualCheckInTime = now // Returned 20 minutes late
         ),
         Outpass(
             id = "PASS-4",

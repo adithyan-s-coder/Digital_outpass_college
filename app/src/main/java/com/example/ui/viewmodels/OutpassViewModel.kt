@@ -55,6 +55,13 @@ class OutpassViewModel(
     val aiReportError: StateFlow<String?> = _aiReportError.asStateFlow()
 
     // Student specific outpasses
+    private val _selectedPassId = MutableStateFlow<String?>(null)
+    val selectedPassId: StateFlow<String?> = _selectedPassId.asStateFlow()
+
+    fun selectStudentPass(passId: String?) {
+        _selectedPassId.value = passId
+    }
+
     val studentOutpasses: StateFlow<List<Outpass>> = combine(
         allOutpasses,
         currentUser,
@@ -62,15 +69,43 @@ class OutpassViewModel(
     ) { passes, user, filter ->
         if (user == null) emptyList()
         else {
-            val list = passes.filter { it.studentId == user.id || it.regNo.equals(user.regNo, ignoreCase = true) }
+            val list = passes
+                .filter { it.studentId == user.id || it.regNo.equals(user.regNo, ignoreCase = true) }
+                .sortedByDescending { it.appliedAt }
             if (filter != null) list.filter { it.status == filter } else list
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Active Pass for Student (APPROVED or CHECKED_OUT or PENDING)
-    val activeStudentPass: StateFlow<Outpass?> = studentOutpasses.map { passes ->
-        passes.firstOrNull { it.status == OutpassStatus.APPROVED || it.status == OutpassStatus.CHECKED_OUT }
-            ?: passes.firstOrNull { it.status == OutpassStatus.PENDING_STAFF || it.status == OutpassStatus.PENDING_HOD }
+    // Active Pass for Student (Prioritizes newly applied passes in workflow, or student selected pass)
+    val activeStudentPass: StateFlow<Outpass?> = combine(
+        studentOutpasses,
+        _selectedPassId
+    ) { passes, selectedId ->
+        if (passes.isEmpty()) return@combine null
+
+        val sorted = passes.sortedByDescending { it.appliedAt }
+
+        // If student explicitly selected a pass to view
+        if (selectedId != null) {
+            val found = sorted.find { it.id.equals(selectedId, ignoreCase = true) }
+            if (found != null) return@combine found
+        }
+
+        // Automatic smart selection:
+        // 1. Highest priority: Any newly applied pass in workflow (APPROVED, PENDING_HOD, or PENDING_STAFF)
+        val inWorkflow = sorted.firstOrNull { pass ->
+            pass.status == OutpassStatus.APPROVED ||
+            pass.status == OutpassStatus.PENDING_HOD ||
+            pass.status == OutpassStatus.PENDING_STAFF
+        }
+        if (inWorkflow != null) return@combine inWorkflow
+
+        // 2. Next: If student is outside on an active check-out
+        val activeOutside = sorted.firstOrNull { it.status == OutpassStatus.CHECKED_OUT }
+        if (activeOutside != null) return@combine activeOutside
+
+        // 3. Fallback: Most recent historical pass
+        sorted.firstOrNull()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     // Pending Approvals for Staff / HOD
@@ -105,6 +140,14 @@ class OutpassViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Scanned pass for immediate gate verification modal
+    private val _scannedPassForVerification = MutableStateFlow<Outpass?>(null)
+    val scannedPassForVerification: StateFlow<Outpass?> = _scannedPassForVerification.asStateFlow()
+
+    fun dismissScannedVerification() {
+        _scannedPassForVerification.value = null
+    }
+
     // All outpasses filtered by active status filter (for Security Officer and Staff/HOD audit screens)
     val filteredAllOutpasses: StateFlow<List<Outpass>> = combine(
         allOutpasses,
@@ -126,22 +169,30 @@ class OutpassViewModel(
     fun handleScannedPass(scannedContent: String) {
         val clean = scannedContent.trim()
         val decoded = com.example.data.models.OutpassQrHelper.decodeFromQr(clean)
-        if (decoded != null) {
-            repository.importScannedOutpass(decoded)
-            _searchQuery.value = decoded.id
-            _userMessage.value = "Verified student pass ${decoded.id} for ${decoded.studentName} (${decoded.department})"
+        val passId = if (decoded != null) {
+            val imported = repository.importScannedOutpass(decoded)
+            imported.id
         } else {
             val passRegex = Regex("""(PASS-\d{3,6})""", RegexOption.IGNORE_CASE)
             val match = passRegex.find(clean)
-            val cleanId = if (match != null) {
+            if (match != null) {
                 match.groupValues[1].uppercase()
             } else if (clean.contains("::")) {
                 clean.substringBefore("::").trim()
             } else {
                 clean
             }
-            _searchQuery.value = cleanId
-            _userMessage.value = "Scanned Pass Code: $cleanId"
+        }
+
+        _searchQuery.value = passId
+        val targetPass = allOutpasses.value.find { it.id.equals(passId, ignoreCase = true) }
+            ?: (if (decoded != null) repository.importScannedOutpass(decoded) else null)
+
+        _scannedPassForVerification.value = targetPass
+        if (targetPass != null) {
+            _userMessage.value = "Verified student pass ${targetPass.id} for ${targetPass.studentName} (${targetPass.department})"
+        } else {
+            _userMessage.value = "Scanned Pass Code: $passId"
         }
     }
 
@@ -209,6 +260,7 @@ class OutpassViewModel(
             return
         }
         val pass = repository.applyOutpass(user, type, destination, reason, outDateTime, returnDateTime)
+        _selectedPassId.value = pass.id // Auto-focus newly applied pass on the student dashboard!
         _userMessage.value = "Outpass request ${pass.id} submitted for Staff Advisor approval!"
     }
 
@@ -228,12 +280,14 @@ class OutpassViewModel(
         val officerName = currentUser.value?.name ?: "Security Officer"
         val result = repository.checkOutGate(passId, officerName)
         _userMessage.value = result
+        _scannedPassForVerification.value = allOutpasses.value.find { it.id.equals(passId, ignoreCase = true) }
     }
 
     fun gateCheckIn(passId: String) {
         val officerName = currentUser.value?.name ?: "Security Officer"
         val result = repository.checkInGate(passId, officerName)
         _userMessage.value = result
+        _scannedPassForVerification.value = allOutpasses.value.find { it.id.equals(passId, ignoreCase = true) }
     }
 
     fun generateAiReport(

@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,7 +82,8 @@ fun StudentDashboardScreen(
     currentUser: User?,
     activePass: Outpass?,
     recentPasses: List<Outpass>,
-    onApplyClick: () -> Unit
+    onApplyClick: () -> Unit,
+    onSelectPass: (String) -> Unit = {}
 ) {
     LazyColumn(
         modifier = Modifier
@@ -197,7 +199,7 @@ fun StudentDashboardScreen(
         // Recent Outpass Applications Section
         item {
             Text(
-                text = "Recent Outpass Applications",
+                text = "Recent Outpass Applications (Tap to View)",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = TextDark
@@ -215,7 +217,11 @@ fun StudentDashboardScreen(
             }
         } else {
             items(recentPasses.take(5)) { pass ->
-                StudentPassSummaryCard(outpass = pass)
+                StudentPassSummaryCard(
+                    outpass = pass,
+                    isCurrentlyActive = (pass.id == activePass?.id),
+                    onClick = { onSelectPass(pass.id) }
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
@@ -246,24 +252,53 @@ fun DigitalGatePassCard(outpass: Outpass) {
         }
     }
 
-    // Live countdown timer coroutine specifically for 1-hour QR Code gate exit validity
-    LaunchedEffect(outpass.id, outpass.status, outpass.isQrUsed) {
+    // Live countdown timer specifically for QR Code gate exit validity
+    LaunchedEffect(outpass.id, outpass.status, outpass.isQrUsed, outpass.hodApproval, outpass.staffApproval) {
         while (true) {
             val nowMs = System.currentTimeMillis()
-            val expiryTime = outpass.getQrExpiryTime()
-            val diffMs = expiryTime - nowMs
 
-            if (outpass.isQrUsed || outpass.status == OutpassStatus.CHECKED_OUT || outpass.status == OutpassStatus.CHECKED_IN) {
-                isQrValidityExpired = true
-                qrTimeRemainingText = "Used at Main Gate"
-            } else if (diffMs <= 0) {
-                isQrValidityExpired = true
-                qrTimeRemainingText = "00m : 00s (Expired)"
-            } else {
-                isQrValidityExpired = false
-                val minutes = diffMs / (1000 * 60)
-                val seconds = (diffMs % (1000 * 60)) / 1000
-                qrTimeRemainingText = String.format("%02dm : %02ds", minutes, seconds)
+            when (outpass.status) {
+                OutpassStatus.PENDING_STAFF -> {
+                    isQrValidityExpired = false
+                    qrTimeRemainingText = "Awaiting Staff Review"
+                }
+                OutpassStatus.PENDING_HOD -> {
+                    isQrValidityExpired = false
+                    qrTimeRemainingText = "Awaiting HOD Sign-off"
+                }
+                OutpassStatus.APPROVED -> {
+                    val expiryTime = outpass.getQrExpiryTime()
+                    val diffMs = expiryTime - nowMs
+
+                    if (outpass.isQrUsed) {
+                        isQrValidityExpired = true
+                        qrTimeRemainingText = "Scanned at Main Gate"
+                    } else if (diffMs <= 0) {
+                        isQrValidityExpired = true
+                        qrTimeRemainingText = "00m : 00s (Expired)"
+                    } else {
+                        isQrValidityExpired = false
+                        val minutes = diffMs / (1000 * 60)
+                        val seconds = (diffMs % (1000 * 60)) / 1000
+                        qrTimeRemainingText = String.format("%02dm : %02ds", minutes, seconds)
+                    }
+                }
+                OutpassStatus.CHECKED_OUT -> {
+                    isQrValidityExpired = true
+                    qrTimeRemainingText = "Scanned at Main Gate"
+                }
+                OutpassStatus.CHECKED_IN -> {
+                    isQrValidityExpired = true
+                    qrTimeRemainingText = "Trip Completed"
+                }
+                OutpassStatus.REJECTED -> {
+                    isQrValidityExpired = true
+                    qrTimeRemainingText = "Request Rejected"
+                }
+                OutpassStatus.EXPIRED -> {
+                    isQrValidityExpired = true
+                    qrTimeRemainingText = "Expired"
+                }
             }
             delay(1000)
         }
@@ -334,7 +369,50 @@ fun DigitalGatePassCard(outpass: Outpass) {
                     showScanAnimation = false
                 )
 
-                if (outpass.isQrUsed || outpass.status == OutpassStatus.CHECKED_OUT || outpass.status == OutpassStatus.CHECKED_IN) {
+                if (outpass.status == OutpassStatus.PENDING_STAFF || outpass.status == OutpassStatus.PENDING_HOD) {
+                    Box(
+                        modifier = Modifier
+                            .size(185.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.Black.copy(alpha = 0.82f))
+                            .padding(14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFF59E0B))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "APPROVAL IN PROGRESS",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = if (outpass.status == OutpassStatus.PENDING_STAFF)
+                                    "Step 1: Awaiting Staff Review"
+                                else
+                                    "Step 2: Awaiting HOD Sign-off",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "QR code will activate for 1-hour gate exit immediately once approved.",
+                                fontSize = 9.sp,
+                                color = Color.LightGray,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
+                } else if (outpass.isQrUsed || outpass.status == OutpassStatus.CHECKED_OUT || outpass.status == OutpassStatus.CHECKED_IN) {
                     Box(
                         modifier = Modifier
                             .size(180.dp)
@@ -362,7 +440,8 @@ fun DigitalGatePassCard(outpass: Outpass) {
                                 text = "Scanned at Main Gate\nSingle-Use Completed",
                                 fontSize = 10.sp,
                                 color = Color.LightGray,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     }
@@ -432,27 +511,44 @@ fun DigitalGatePassCard(outpass: Outpass) {
             Spacer(modifier = Modifier.height(8.dp))
 
             // 1-Hour QR Code Validity Window Badge
+            val isPendingApproval = outpass.status == OutpassStatus.PENDING_STAFF || outpass.status == OutpassStatus.PENDING_HOD
+            val pillColor = when {
+                isPendingApproval -> Color(0xFFF59E0B)
+                isQrValidityExpired -> CrimsonError
+                else -> EmeraldSuccess
+            }
+
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = if (isQrValidityExpired) CrimsonError.copy(alpha = 0.15f) else EmeraldSuccess.copy(alpha = 0.15f),
-                border = BorderStroke(1.dp, if (isQrValidityExpired) CrimsonError else EmeraldSuccess)
+                color = pillColor.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, pillColor)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = if (isQrValidityExpired) Icons.Default.Info else Icons.Default.Timer,
+                        imageVector = when {
+                            isPendingApproval -> Icons.Default.Alarm
+                            isQrValidityExpired -> Icons.Default.Info
+                            else -> Icons.Default.Timer
+                        },
                         contentDescription = null,
-                        tint = if (isQrValidityExpired) CrimsonError else EmeraldSuccess,
+                        tint = pillColor,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isQrValidityExpired) "QR Status: EXPIRED (1-Hour Limit)" else "QR Active: $qrTimeRemainingText (1-Hour Limit)",
-                        fontSize = 12.sp,
+                        text = when {
+                            outpass.status == OutpassStatus.PENDING_STAFF -> "Approval Status: Awaiting Staff Review"
+                            outpass.status == OutpassStatus.PENDING_HOD -> "Approval Status: Awaiting HOD Sign-off"
+                            outpass.isQrUsed || outpass.status == OutpassStatus.CHECKED_OUT -> "QR Status: EXPIRED & USED (Single-Use Completed)"
+                            isQrValidityExpired -> "QR Status: EXPIRED (1-Hour Limit)"
+                            else -> "QR Status: ACTIVE ($qrTimeRemainingText remaining)"
+                        },
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isQrValidityExpired) CrimsonError else EmeraldSuccess
+                        color = pillColor
                     )
                 }
             }
@@ -542,13 +638,22 @@ private fun DetailRow(
 }
 
 @Composable
-fun StudentPassSummaryCard(outpass: Outpass) {
+fun StudentPassSummaryCard(
+    outpass: Outpass,
+    isCurrentlyActive: Boolean = false,
+    onClick: () -> Unit = {}
+) {
     val df = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Slate700),
+        border = androidx.compose.foundation.BorderStroke(
+            if (isCurrentlyActive) 2.dp else 1.dp,
+            if (isCurrentlyActive) IndigoPrimary else Slate700
+        ),
         colors = CardDefaults.cardColors(containerColor = Slate800)
     ) {
         Row(
@@ -572,6 +677,22 @@ fun StudentPassSummaryCard(outpass: Outpass) {
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (isCurrentlyActive) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(IndigoPrimary.copy(alpha = 0.2f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "ACTIVE PASS",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = IndigoPrimary
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))

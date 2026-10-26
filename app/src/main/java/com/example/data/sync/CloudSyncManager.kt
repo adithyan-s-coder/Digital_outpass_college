@@ -1,6 +1,7 @@
 package com.example.data.sync
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import com.example.data.models.ApprovalRecord
 import com.example.data.models.Outpass
@@ -9,6 +10,7 @@ import com.example.data.models.OutpassType
 import com.example.data.models.User
 import com.example.data.models.UserRole
 import com.example.data.repository.OutpassRepository
+import com.example.ui.util.ImageCropUtil
 import com.example.util.OutpassNotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,54 +26,55 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.TimeUnit
 
-/**
- * CloudSyncManager provides instant multi-device synchronization over HTTPS.
- * Ensures:
- * 1. An account registered/logged in on ANY mobile device is immediately synchronized
- *    and usable across ALL mobile devices.
- * 2. Outpass requests submitted from a student's mobile device are pushed to the cloud
- *    and immediately trigger push notifications on the Department Staff and HOD mobile devices:
- *    'the "<student name>" request the outpass for this "<reason>"'
- * 3. Approvals, rejections, and gate security checkouts are synced in real-time across all devices.
- */
 object CloudSyncManager {
     private const val TAG = "CloudSyncManager"
-
-    // Permanent cloud sync objects hosted on global REST endpoint
+    private const val BASE_URL = "https://api.restful-api.dev/objects"
     const val USERS_OBJECT_ID = "ff808181a09d98f701a0f079103b46d8"
     const val OUTPASSES_OBJECT_ID = "ff808181a09d98f701a0f07938af46d9"
-    private const val BASE_URL = "https://api.restful-api.dev/objects"
 
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
-
     private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
+        .writeTimeout(12, TimeUnit.SECONDS)
         .build()
 
     private val syncScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var syncJob: Job? = null
     private var isSyncing = false
-
     private val knownNotifiedPassIds = mutableSetOf<String>()
 
     fun startSync(context: Context, repository: OutpassRepository) {
         val appContext = context.applicationContext
+
+        // Restore known notified passes from SharedPreferences so restarts don't spam
+        try {
+            val prefs = appContext.getSharedPreferences("outpass_notified_cache", Context.MODE_PRIVATE)
+            val saved = prefs.getStringSet("notified_ids", emptySet())
+            if (!saved.isNullOrEmpty()) {
+                knownNotifiedPassIds.addAll(saved)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not load notified cache: ${e.message}")
+        }
+
+        // Add currently existing local passes to known passes
+        repository.outpasses.value.forEach {
+            knownNotifiedPassIds.add(it.id)
+        }
+
         if (syncJob?.isActive == true) return
 
-        // Seed initial known pass IDs so existing local passes don't trigger duplicate notifications on boot
-        repository.outpasses.value.forEach { knownNotifiedPassIds.add(it.id) }
-
         syncJob = syncScope.launch {
-            // Run immediate sync on start
+            // Immediate sync on launch
             syncFromCloud(appContext, repository)
 
-            // Continue background polling every 10 seconds for real-time multi-device alerts
+            // Fast continuous polling every 4 seconds for real-time notifications
             while (isActive) {
-                delay(10000L)
+                delay(4000)
                 try {
                     syncFromCloud(appContext, repository)
                 } catch (e: Exception) {
@@ -91,10 +94,7 @@ object CloudSyncManager {
         if (isSyncing) return
         isSyncing = true
         try {
-            // 1. Sync registered users across all devices
-            syncUsers(repository)
-
-            // 2. Sync outpass requests and approvals across all devices
+            syncUsers(context, repository)
             syncOutpasses(context, repository)
         } catch (e: Exception) {
             Log.e(TAG, "Error during sync: ${e.message}")
@@ -103,52 +103,162 @@ object CloudSyncManager {
         }
     }
 
-    // -------------------------------------------------------------
-    // USERS SYNCHRONIZATION
-    // -------------------------------------------------------------
-
-    private fun syncUsers(repository: OutpassRepository) {
+    private fun persistNotifiedIds(context: Context) {
         try {
-            val cloudUsers = fetchUsersFromCloud()
-            if (cloudUsers.isNotEmpty()) {
-                val currentLocalUsers = repository.users.value.toMutableList()
-                var updated = false
+            val prefs = context.getSharedPreferences("outpass_notified_cache", Context.MODE_PRIVATE)
+            prefs.edit().putStringSet("notified_ids", HashSet(knownNotifiedPassIds)).apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist notified cache: ${e.message}")
+        }
+    }
 
-                for (cu in cloudUsers) {
-                    val localIndex = currentLocalUsers.indexOfFirst {
-                        it.id == cu.id || it.email.equals(cu.email, ignoreCase = true)
+    private fun syncUsers(context: Context, repository: OutpassRepository) {
+        val cloudUsers = fetchUsersFromCloud()
+        if (cloudUsers.isEmpty()) {
+            if (repository.users.value.isNotEmpty()) {
+                pushUsersToCloud(context, repository.users.value)
+            }
+            return
+        }
+
+        val localUsers = repository.users.value.toMutableList()
+        var changed = false
+
+        for (cu in cloudUsers) {
+            // Process cross-device photo: if photoUri is Base64, save it to disk on this device
+            var resolvedPhotoUri = cu.photoUri
+            if (!resolvedPhotoUri.isNullOrBlank() && (resolvedPhotoUri.startsWith("data:image/") || resolvedPhotoUri.startsWith("/9j/"))) {
+                val localSaved = ImageCropUtil.saveBase64ToDisk(context, resolvedPhotoUri, "user_${cu.id}")
+                if (localSaved != null) {
+                    resolvedPhotoUri = localSaved
+                }
+            }
+
+            val processedUser = cu.copy(photoUri = resolvedPhotoUri)
+            val index = localUsers.indexOfFirst {
+                it.id == processedUser.id ||
+                it.email.equals(processedUser.email, ignoreCase = true) ||
+                (processedUser.regNo.isNotBlank() && it.regNo.equals(processedUser.regNo, ignoreCase = true))
+            }
+
+            if (index == -1) {
+                localUsers.add(processedUser)
+                changed = true
+            } else {
+                val existing = localUsers[index]
+                // Keep the freshest password or photo
+                val shouldUpdate = existing.password != processedUser.password ||
+                                   (processedUser.photoUri != null && processedUser.photoUri != existing.photoUri) ||
+                                   (processedUser.lastPasswordResetAt ?: 0L) > (existing.lastPasswordResetAt ?: 0L)
+                if (shouldUpdate) {
+                    localUsers[index] = processedUser
+                    changed = true
+                }
+            }
+        }
+
+        if (changed) {
+            repository.setUsersFromSync(localUsers)
+        }
+
+        // If local has users not in cloud (e.g. newly registered), push to cloud
+        val missingInCloud = localUsers.any { local ->
+            cloudUsers.none { it.id == local.id || it.email.equals(local.email, ignoreCase = true) }
+        }
+        if (missingInCloud) {
+            pushUsersToCloud(context, localUsers)
+        }
+    }
+
+    private fun syncOutpasses(context: Context, repository: OutpassRepository) {
+        val cloudPasses = fetchOutpassesFromCloud()
+        if (cloudPasses.isEmpty()) {
+            if (repository.outpasses.value.isNotEmpty()) {
+                pushOutpassesToCloud(repository.outpasses.value)
+            }
+            return
+        }
+
+        val currentLocalPasses = repository.outpasses.value.toMutableList()
+        var localChanged = false
+        val currentUser = repository.currentUser.value
+        val userRole = currentUser?.role
+
+        for (cp in cloudPasses) {
+            val localIndex = currentLocalPasses.indexOfFirst { it.id.equals(cp.id, ignoreCase = true) }
+
+            if (localIndex == -1) {
+                // Brand new outpass created on another device!
+                currentLocalPasses.add(0, cp)
+                localChanged = true
+
+                // Check if this notification should fire on this device
+                if (!knownNotifiedPassIds.contains(cp.id)) {
+                    knownNotifiedPassIds.add(cp.id)
+                    persistNotifiedIds(context)
+
+                    val studentUser = repository.findUserByIdentifier(cp.regNo)
+                        ?: repository.findUserByIdentifier(cp.studentId)
+                        ?: User(
+                            id = cp.studentId,
+                            name = cp.studentName,
+                            email = "${cp.regNo.lowercase()}@vetias.ac.in",
+                            role = UserRole.STUDENT,
+                            regNo = cp.regNo,
+                            department = cp.department,
+                            phone = cp.studentPhone,
+                            parentPhone = cp.parentPhone
+                        )
+
+                    // User requested: "the notification is only send to the staff and hod module"
+                    // If this device is logged in as Staff Advisor or HOD (or no user logged in yet):
+                    if (userRole == UserRole.STAFF_ADVISOR || userRole == UserRole.HOD || currentUser == null) {
+                        Log.i(TAG, "Dispatching Staff/HOD outpass notification: student=${cp.studentName}, reason=${cp.reason}")
+                        OutpassNotificationHelper.notifyStaffAndHodOnNewRequest(context, cp, studentUser)
                     }
-                    if (localIndex == -1) {
-                        currentLocalUsers.add(cu)
-                        updated = true
-                        Log.d(TAG, "Imported new user from cloud: ${cu.email} (${cu.role})")
-                    } else {
-                        val local = currentLocalUsers[localIndex]
-                        // Update if cloud has newer password or reset
-                        if (local.password != cu.password || (cu.lastPasswordResetAt ?: 0) > (local.lastPasswordResetAt ?: 0)) {
-                            currentLocalUsers[localIndex] = cu
-                            updated = true
+                }
+            } else {
+                // Outpass already exists locally; check for status updates from other devices
+                val local = currentLocalPasses[localIndex]
+                val statusChanged = local.status != cp.status
+                val qrUsedChanged = local.isQrUsed != cp.isQrUsed
+
+                if (statusChanged || qrUsedChanged || local.actualCheckOutTime != cp.actualCheckOutTime) {
+                    currentLocalPasses[localIndex] = cp
+                    localChanged = true
+                    Log.d(TAG, "Pass ${cp.id} updated from cloud: ${local.status} -> ${cp.status}")
+
+                    // Check for status transition notifications
+                    if (statusChanged) {
+                        val isForThisStudent = currentUser?.id == cp.studentId ||
+                                currentUser?.regNo.equals(cp.regNo, ignoreCase = true)
+
+                        if (cp.status == OutpassStatus.PENDING_HOD && userRole == UserRole.HOD) {
+                            // Staff approved, now notify HOD on HOD's device
+                            val student = repository.findUserByIdentifier(cp.regNo)
+                            OutpassNotificationHelper.notifyHodOnStaffApproval(context, cp, student)
+                        } else if (cp.status == OutpassStatus.APPROVED && isForThisStudent) {
+                            // HOD approved, notify Student on student's device
+                            OutpassNotificationHelper.notifyStudentOnApproval(context, cp)
+                        } else if (cp.status == OutpassStatus.REJECTED && isForThisStudent) {
+                            // Outpass rejected, notify Student
+                            OutpassNotificationHelper.notifyStudentOnRejection(context, cp, cp.rejectionReason ?: "Request rejected")
                         }
                     }
                 }
-
-                if (updated) {
-                    repository.setUsersFromSync(currentLocalUsers)
-                }
-
-                // If local has users that are NOT yet in the cloud, push merged list to cloud
-                val missingInCloud = currentLocalUsers.any { localUser ->
-                    cloudUsers.none { it.id == localUser.id || it.email.equals(localUser.email, ignoreCase = true) }
-                }
-                if (missingInCloud) {
-                    pushUsersToCloud(currentLocalUsers)
-                }
-            } else {
-                // Cloud is empty, push current local users to seed the cloud
-                pushUsersToCloud(repository.users.value)
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "syncUsers error: ${e.message}")
+        }
+
+        if (localChanged) {
+            repository.setOutpassesFromSync(currentLocalPasses)
+        }
+
+        // Check if there are local outpasses created on this device missing in cloud
+        val missingInCloud = currentLocalPasses.any { local ->
+            cloudPasses.none { it.id.equals(local.id, ignoreCase = true) }
+        }
+        if (missingInCloud) {
+            pushOutpassesToCloud(currentLocalPasses)
         }
     }
 
@@ -162,15 +272,20 @@ object CloudSyncManager {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return emptyList()
                 val body = response.body?.string() ?: return emptyList()
-                val root = JSONObject(body)
-                val data = root.optJSONObject("data") ?: return emptyList()
+                val json = JSONObject(body)
+                val data = json.optJSONObject("data") ?: return emptyList()
                 val usersArray = data.optJSONArray("users") ?: return emptyList()
 
-                val list = mutableListOf<User>()
+                val users = mutableListOf<User>()
                 for (i in 0 until usersArray.length()) {
                     val obj = usersArray.getJSONObject(i)
-                    val role = try { UserRole.valueOf(obj.getString("role")) } catch (_: Exception) { UserRole.STUDENT }
-                    list.add(
+                    val role = try {
+                        UserRole.valueOf(obj.getString("role"))
+                    } catch (e: Exception) {
+                        UserRole.STUDENT
+                    }
+
+                    users.add(
                         User(
                             id = obj.getString("id"),
                             name = obj.getString("name"),
@@ -188,7 +303,7 @@ object CloudSyncManager {
                         )
                     )
                 }
-                list
+                users
             }
         } catch (e: Exception) {
             Log.w(TAG, "fetchUsersFromCloud exception: ${e.message}")
@@ -196,125 +311,69 @@ object CloudSyncManager {
         }
     }
 
-    fun pushUsersToCloud(users: List<User>) {
+    fun pushUsersToCloud(context: Context, users: List<User>) {
         syncScope.launch {
             try {
-                val usersArray = JSONArray()
+                val array = JSONArray()
                 for (u in users) {
-                    val obj = JSONObject().apply {
-                        put("id", u.id)
-                        put("name", u.name)
-                        put("email", u.email)
-                        put("role", u.role.name)
-                        put("regNo", u.regNo)
-                        put("department", u.department)
-                        put("hostelBlock", u.hostelBlock)
-                        put("roomNumber", u.roomNumber)
-                        put("phone", u.phone)
-                        put("parentPhone", u.parentPhone)
-                        put("photoUri", u.photoUri ?: "")
-                        put("password", u.password)
-                        if (u.lastPasswordResetAt != null) put("lastPasswordResetAt", u.lastPasswordResetAt)
+                    val obj = JSONObject()
+                    obj.put("id", u.id)
+                    obj.put("name", u.name)
+                    obj.put("email", u.email)
+                    obj.put("role", u.role.name)
+                    obj.put("regNo", u.regNo)
+                    obj.put("department", u.department)
+                    obj.put("hostelBlock", u.hostelBlock)
+                    obj.put("roomNumber", u.roomNumber)
+                    obj.put("phone", u.phone)
+                    obj.put("parentPhone", u.parentPhone)
+                    obj.put("password", u.password)
+                    if (u.lastPasswordResetAt != null) {
+                        obj.put("lastPasswordResetAt", u.lastPasswordResetAt)
                     }
-                    usersArray.put(obj)
+
+                    // Convert local photo file to Base64 so it can be viewed on other devices!
+                    val photo = u.photoUri
+                    if (!photo.isNullOrBlank()) {
+                        if (photo.startsWith("data:image/") || photo.startsWith("http")) {
+                            obj.put("photoUri", photo)
+                        } else if (photo.startsWith("file://") || photo.startsWith("/")) {
+                            val path = photo.removePrefix("file://")
+                            val file = File(path)
+                            if (file.exists() && file.length() < 300_000) {
+                                try {
+                                    val bytes = file.readBytes()
+                                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                                    obj.put("photoUri", "data:image/jpeg;base64,$b64")
+                                } catch (e: Exception) {
+                                    obj.put("photoUri", photo)
+                                }
+                            } else {
+                                obj.put("photoUri", photo)
+                            }
+                        } else {
+                            obj.put("photoUri", photo)
+                        }
+                    }
+
+                    array.put(obj)
                 }
 
                 val payload = JSONObject().apply {
                     put("name", "vetias_outpass_users_v1")
-                    put("data", JSONObject().apply {
-                        put("users", usersArray)
-                    })
+                    put("data", JSONObject().put("users", array))
                 }
 
-                val req = Request.Builder()
+                val request = Request.Builder()
                     .url("$BASE_URL/$USERS_OBJECT_ID")
                     .put(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
                     .build()
 
-                client.newCall(req).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        Log.d(TAG, "Successfully synced ${users.size} users to cloud.")
-                    } else {
-                        Log.w(TAG, "Failed pushing users to cloud: code ${resp.code}")
-                    }
-                }
+                client.newCall(request).execute().close()
+                Log.d(TAG, "Successfully pushed ${users.size} users to cloud")
             } catch (e: Exception) {
-                Log.e(TAG, "pushUsersToCloud error: ${e.message}")
+                Log.e(TAG, "Failed to push users to cloud: ${e.message}")
             }
-        }
-    }
-
-    // -------------------------------------------------------------
-    // OUTPASSES SYNCHRONIZATION & NOTIFICATIONS
-    // -------------------------------------------------------------
-
-    private fun syncOutpasses(context: Context, repository: OutpassRepository) {
-        try {
-            val cloudPasses = fetchOutpassesFromCloud()
-            if (cloudPasses.isEmpty()) {
-                // If cloud is empty, seed it with current local outpasses
-                if (repository.outpasses.value.isNotEmpty()) {
-                    pushOutpassesToCloud(repository.outpasses.value)
-                }
-                return
-            }
-
-            val currentLocalPasses = repository.outpasses.value.toMutableList()
-            var localChanged = false
-
-            for (cp in cloudPasses) {
-                val localIndex = currentLocalPasses.indexOfFirst { it.id.equals(cp.id, ignoreCase = true) }
-                if (localIndex == -1) {
-                    // NEW PASS DETECTED FROM ANOTHER MOBILE DEVICE!
-                    currentLocalPasses.add(0, cp)
-                    localChanged = true
-
-                    // Check if notification should fire on this device:
-                    // If pass was newly submitted (applied recently or PENDING_STAFF) and not yet notified locally:
-                    if (!knownNotifiedPassIds.contains(cp.id)) {
-                        knownNotifiedPassIds.add(cp.id)
-
-                        // Trigger push notification to Department Staff & HOD
-                        val studentUser = repository.findUserByIdentifier(cp.regNo)
-                            ?: repository.findUserByIdentifier(cp.studentId)
-                            ?: User(
-                                id = cp.studentId,
-                                name = cp.studentName,
-                                email = "${cp.regNo.lowercase()}@vetias.ac.in",
-                                role = UserRole.STUDENT,
-                                regNo = cp.regNo,
-                                department = cp.department,
-                                phone = cp.studentPhone,
-                                parentPhone = cp.parentPhone
-                            )
-
-                        Log.i(TAG, "Dispatching cross-device outpass notification for student ${cp.studentName}")
-                        OutpassNotificationHelper.notifyStaffAndHodOnNewRequest(context, cp, studentUser)
-                    }
-                } else {
-                    val local = currentLocalPasses[localIndex]
-                    // If cloud has an updated status or approval, update local
-                    if (local.status != cp.status || local.isQrUsed != cp.isQrUsed || local.actualCheckOutTime != cp.actualCheckOutTime) {
-                        currentLocalPasses[localIndex] = cp
-                        localChanged = true
-                        Log.d(TAG, "Updated pass ${cp.id} status to ${cp.status} from cloud")
-                    }
-                }
-            }
-
-            if (localChanged) {
-                repository.setOutpassesFromSync(currentLocalPasses)
-            }
-
-            // If local has outpasses that are missing from cloud, upload them
-            val missingInCloud = currentLocalPasses.any { localPass ->
-                cloudPasses.none { it.id.equals(localPass.id, ignoreCase = true) }
-            }
-            if (missingInCloud) {
-                pushOutpassesToCloud(currentLocalPasses)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "syncOutpasses error: ${e.message}")
         }
     }
 
@@ -328,39 +387,64 @@ object CloudSyncManager {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return emptyList()
                 val body = response.body?.string() ?: return emptyList()
-                val root = JSONObject(body)
-                val data = root.optJSONObject("data") ?: return emptyList()
-                val outpassesArray = data.optJSONArray("outpasses") ?: return emptyList()
+                val json = JSONObject(body)
+                val data = json.optJSONObject("data") ?: return emptyList()
+                val passesArray = data.optJSONArray("outpasses") ?: return emptyList()
 
-                val list = mutableListOf<Outpass>()
-                for (i in 0 until outpassesArray.length()) {
-                    val obj = outpassesArray.getJSONObject(i)
-                    val type = try { OutpassType.valueOf(obj.getString("type")) } catch (_: Exception) { OutpassType.LOCAL }
-                    val status = try { OutpassStatus.valueOf(obj.getString("status")) } catch (_: Exception) { OutpassStatus.PENDING_STAFF }
+                val passes = mutableListOf<Outpass>()
+                for (i in 0 until passesArray.length()) {
+                    val obj = passesArray.getJSONObject(i)
+                    if (!obj.has("studentName") || !obj.has("type")) continue
 
-                    val staffApp = if (obj.has("staffApproval")) {
-                        val s = obj.getJSONObject("staffApproval")
-                        val r = try { UserRole.valueOf(s.getString("role")) } catch (_: Exception) { UserRole.STAFF_ADVISOR }
-                        ApprovalRecord(r, s.getString("name"), s.getString("status"), s.getLong("timestamp"), s.optString("remarks", ""))
+                    val type = try {
+                        OutpassType.valueOf(obj.getString("type"))
+                    } catch (e: Exception) {
+                        OutpassType.LOCAL
+                    }
+
+                    val status = try {
+                        OutpassStatus.valueOf(obj.getString("status"))
+                    } catch (e: Exception) {
+                        OutpassStatus.PENDING_STAFF
+                    }
+
+                    val staffApproval = if (obj.has("staffApproval") && !obj.isNull("staffApproval")) {
+                        val sObj = obj.getJSONObject("staffApproval")
+                        val sRole = try { UserRole.valueOf(sObj.getString("approverRole")) } catch (e: Exception) { UserRole.STAFF_ADVISOR }
+                        val statusVal = if (sObj.has("status")) sObj.getString("status") else sObj.optString("decision", "APPROVED")
+                        ApprovalRecord(
+                            approverRole = sRole,
+                            approverName = sObj.getString("approverName"),
+                            status = statusVal,
+                            timestamp = sObj.optLong("timestamp", System.currentTimeMillis()),
+                            remarks = sObj.optString("remarks", "")
+                        )
                     } else null
 
-                    val hodApp = if (obj.has("hodApproval")) {
-                        val h = obj.getJSONObject("hodApproval")
-                        val r = try { UserRole.valueOf(h.getString("role")) } catch (_: Exception) { UserRole.HOD }
-                        ApprovalRecord(r, h.getString("name"), h.getString("status"), h.getLong("timestamp"), h.optString("remarks", ""))
+                    val hodApproval = if (obj.has("hodApproval") && !obj.isNull("hodApproval")) {
+                        val hObj = obj.getJSONObject("hodApproval")
+                        val hRole = try { UserRole.valueOf(hObj.getString("approverRole")) } catch (e: Exception) { UserRole.HOD }
+                        val statusVal = if (hObj.has("status")) hObj.getString("status") else hObj.optString("decision", "APPROVED")
+                        ApprovalRecord(
+                            approverRole = hRole,
+                            approverName = hObj.getString("approverName"),
+                            status = statusVal,
+                            timestamp = hObj.optLong("timestamp", System.currentTimeMillis()),
+                            remarks = hObj.optString("remarks", "")
+                        )
                     } else null
 
-                    list.add(
+                    passes.add(
                         Outpass(
                             id = obj.getString("id"),
                             studentId = obj.getString("studentId"),
                             studentName = obj.getString("studentName"),
                             regNo = obj.getString("regNo"),
                             department = obj.getString("department"),
-                            hostelBlock = obj.getString("hostelBlock"),
-                            roomNo = obj.getString("roomNo"),
-                            studentPhone = obj.getString("studentPhone"),
-                            parentPhone = obj.getString("parentPhone"),
+                            hostelBlock = obj.optString("hostelBlock", ""),
+                            roomNo = obj.optString("roomNo", ""),
+                            studentPhone = obj.optString("studentPhone", ""),
+                            parentPhone = obj.optString("parentPhone", ""),
                             type = type,
                             destination = obj.getString("destination"),
                             reason = obj.getString("reason"),
@@ -369,21 +453,21 @@ object CloudSyncManager {
                             status = status,
                             qrToken = obj.optString("qrToken", ""),
                             appliedAt = obj.optLong("appliedAt", System.currentTimeMillis()),
-                            staffApproval = staffApp,
-                            hodApproval = hodApp,
-                            actualCheckOutTime = if (obj.has("actualCheckOutTime")) obj.getLong("actualCheckOutTime") else null,
-                            actualCheckInTime = if (obj.has("actualCheckInTime")) obj.getLong("actualCheckInTime") else null,
-                            rejectionReason = if (obj.has("rejectionReason")) obj.getString("rejectionReason") else null,
+                            staffApproval = staffApproval,
+                            hodApproval = hodApproval,
+                            actualCheckOutTime = if (obj.has("actualCheckOutTime") && !obj.isNull("actualCheckOutTime")) obj.getLong("actualCheckOutTime") else null,
+                            actualCheckInTime = if (obj.has("actualCheckInTime") && !obj.isNull("actualCheckInTime")) obj.getLong("actualCheckInTime") else null,
+                            rejectionReason = if (obj.has("rejectionReason") && !obj.isNull("rejectionReason")) obj.getString("rejectionReason") else null,
                             parentNotified = obj.optBoolean("parentNotified", false),
                             isQrUsed = obj.optBoolean("isQrUsed", false),
                             studentPhotoUri = obj.optString("studentPhotoUri", "").takeIf { it.isNotBlank() }
                         )
                     )
                 }
-                list
+                passes
             }
         } catch (e: Exception) {
-            Log.w(TAG, "fetchOutpassesFromCloud error: ${e.message}")
+            Log.w(TAG, "fetchOutpassesFromCloud exception: ${e.message}")
             emptyList()
         }
     }
@@ -392,76 +476,71 @@ object CloudSyncManager {
         syncScope.launch {
             try {
                 val array = JSONArray()
-                // Keep the most recent 50 outpasses in cloud for fast bandwidth
-                val subset = outpasses.take(50)
-                for (p in subset) {
-                    val obj = JSONObject().apply {
-                        put("id", p.id)
-                        put("studentId", p.studentId)
-                        put("studentName", p.studentName)
-                        put("regNo", p.regNo)
-                        put("department", p.department)
-                        put("hostelBlock", p.hostelBlock)
-                        put("roomNo", p.roomNo)
-                        put("studentPhone", p.studentPhone)
-                        put("parentPhone", p.parentPhone)
-                        put("type", p.type.name)
-                        put("destination", p.destination)
-                        put("reason", p.reason)
-                        put("outDateTime", p.outDateTime)
-                        put("returnDateTime", p.returnDateTime)
-                        put("status", p.status.name)
-                        put("qrToken", p.qrToken)
-                        put("appliedAt", p.appliedAt)
-                        if (p.staffApproval != null) {
-                            put("staffApproval", JSONObject().apply {
-                                put("role", p.staffApproval.approverRole.name)
-                                put("name", p.staffApproval.approverName)
-                                put("status", p.staffApproval.status)
-                                put("timestamp", p.staffApproval.timestamp)
-                                put("remarks", p.staffApproval.remarks)
-                            })
-                        }
-                        if (p.hodApproval != null) {
-                            put("hodApproval", JSONObject().apply {
-                                put("role", p.hodApproval.approverRole.name)
-                                put("name", p.hodApproval.approverName)
-                                put("status", p.hodApproval.status)
-                                put("timestamp", p.hodApproval.timestamp)
-                                put("remarks", p.hodApproval.remarks)
-                            })
-                        }
-                        if (p.actualCheckOutTime != null) put("actualCheckOutTime", p.actualCheckOutTime)
-                        if (p.actualCheckInTime != null) put("actualCheckInTime", p.actualCheckInTime)
-                        if (p.rejectionReason != null) put("rejectionReason", p.rejectionReason)
-                        put("parentNotified", p.parentNotified)
-                        put("isQrUsed", p.isQrUsed)
-                        if (p.studentPhotoUri != null) put("studentPhotoUri", p.studentPhotoUri)
+                for (p in outpasses) {
+                    val obj = JSONObject()
+                    obj.put("id", p.id)
+                    obj.put("studentId", p.studentId)
+                    obj.put("studentName", p.studentName)
+                    obj.put("regNo", p.regNo)
+                    obj.put("department", p.department)
+                    obj.put("hostelBlock", p.hostelBlock)
+                    obj.put("roomNo", p.roomNo)
+                    obj.put("studentPhone", p.studentPhone)
+                    obj.put("parentPhone", p.parentPhone)
+                    obj.put("type", p.type.name)
+                    obj.put("destination", p.destination)
+                    obj.put("reason", p.reason)
+                    obj.put("outDateTime", p.outDateTime)
+                    obj.put("returnDateTime", p.returnDateTime)
+                    obj.put("status", p.status.name)
+                    obj.put("qrToken", p.qrToken)
+                    obj.put("appliedAt", p.appliedAt)
+                    obj.put("parentNotified", p.parentNotified)
+                    obj.put("isQrUsed", p.isQrUsed)
+                    if (p.studentPhotoUri != null) obj.put("studentPhotoUri", p.studentPhotoUri)
+                    if (p.actualCheckOutTime != null) obj.put("actualCheckOutTime", p.actualCheckOutTime)
+                    if (p.actualCheckInTime != null) obj.put("actualCheckInTime", p.actualCheckInTime)
+                    if (p.rejectionReason != null) obj.put("rejectionReason", p.rejectionReason)
+
+                    if (p.staffApproval != null) {
+                        obj.put("staffApproval", JSONObject().apply {
+                            put("approverRole", p.staffApproval.approverRole.name)
+                            put("approverName", p.staffApproval.approverName)
+                            put("status", p.staffApproval.status)
+                            put("decision", p.staffApproval.status)
+                            put("timestamp", p.staffApproval.timestamp)
+                            put("remarks", p.staffApproval.remarks)
+                        })
                     }
+
+                    if (p.hodApproval != null) {
+                        obj.put("hodApproval", JSONObject().apply {
+                            put("approverRole", p.hodApproval.approverRole.name)
+                            put("approverName", p.hodApproval.approverName)
+                            put("status", p.hodApproval.status)
+                            put("decision", p.hodApproval.status)
+                            put("timestamp", p.hodApproval.timestamp)
+                            put("remarks", p.hodApproval.remarks)
+                        })
+                    }
+
                     array.put(obj)
                 }
 
                 val payload = JSONObject().apply {
                     put("name", "vetias_outpass_requests_v1")
-                    put("data", JSONObject().apply {
-                        put("outpasses", array)
-                    })
+                    put("data", JSONObject().put("outpasses", array))
                 }
 
-                val req = Request.Builder()
+                val request = Request.Builder()
                     .url("$BASE_URL/$OUTPASSES_OBJECT_ID")
                     .put(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
                     .build()
 
-                client.newCall(req).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        Log.d(TAG, "Successfully synced ${subset.size} outpasses to cloud.")
-                    } else {
-                        Log.w(TAG, "Failed pushing outpasses to cloud: code ${resp.code}")
-                    }
-                }
+                client.newCall(request).execute().close()
+                Log.d(TAG, "Successfully pushed ${outpasses.size} outpasses to cloud")
             } catch (e: Exception) {
-                Log.e(TAG, "pushOutpassesToCloud error: ${e.message}")
+                Log.e(TAG, "Failed to push outpasses to cloud: ${e.message}")
             }
         }
     }

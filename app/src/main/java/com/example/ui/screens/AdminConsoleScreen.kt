@@ -169,7 +169,7 @@ fun AdminConsoleScreen(
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = Slate800,
-            contentColor = Color.White,
+            contentColor = GreenDark,
             indicator = { tabPositions ->
                 TabRowDefaults.SecondaryIndicator(
                     modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
@@ -180,17 +180,23 @@ fun AdminConsoleScreen(
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("All Passes (${allOutpasses.size})", fontWeight = FontWeight.Bold) }
+                selectedContentColor = GreenDark,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = { Text("Passes (${allOutpasses.size})", fontWeight = FontWeight.Bold, maxLines = 1) }
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
-                text = { Text("Users (${allUsers.size})", fontWeight = FontWeight.Bold) }
+                selectedContentColor = GreenDark,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = { Text("Users (${allUsers.size})", fontWeight = FontWeight.Bold, maxLines = 1) }
             )
             Tab(
                 selected = selectedTab == 2,
                 onClick = { selectedTab = 2 },
-                text = { Text("Gate Logs (${allGateLogs.size})", fontWeight = FontWeight.Bold) }
+                selectedContentColor = GreenDark,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = { Text("Logs (${allGateLogs.size})", fontWeight = FontWeight.Bold, maxLines = 1) }
             )
         }
 
@@ -324,7 +330,11 @@ private fun AdminPassCard(outpass: Outpass, df: SimpleDateFormat) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
+                ) {
                     Text(text = "${outpass.studentName} (${outpass.regNo})", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = TextDark)
                     Text(text = "PASS: ${outpass.id} • ${outpass.department}", style = MaterialTheme.typography.labelSmall, color = GreenPrimary, fontWeight = FontWeight.Bold)
                 }
