@@ -1,11 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
-import com.example.data.local.AppDatabase
 import com.example.data.local.LocalBackupStorage
-import com.example.data.local.entities.GateLogEntity
-import com.example.data.local.entities.OutpassEntity
-import com.example.data.local.entities.UserEntity
 import com.example.data.models.ApprovalRecord
 import com.example.data.models.GateLog
 import com.example.data.models.Outpass
@@ -93,37 +89,7 @@ class OutpassRepository {
             LocalBackupStorage.saveGateLogs(appCtx, seedGateLogs)
         }
 
-        // 4. Background Room Database synchronization
-        repoScope.launch {
-            try {
-                val db = AppDatabase.getDatabase(appCtx)
-                val roomUsers = db.userDao().getAllUsers()
-                if (roomUsers.isEmpty()) {
-                    db.userDao().insertUsers(_users.value.map { UserEntity.fromUser(it) })
-                } else {
-                    val map = _users.value.associateBy { it.id }.toMutableMap()
-                    for (ru in roomUsers) {
-                        map[ru.id] = ru.toUser()
-                    }
-                    _users.value = map.values.toList()
-                    LocalBackupStorage.saveUsers(appCtx, _users.value)
-                }
-
-                val roomOutpasses = db.outpassDao().getAllOutpasses()
-                if (roomOutpasses.isEmpty()) {
-                    db.outpassDao().insertOutpasses(_outpasses.value.map { OutpassEntity.fromOutpass(it) })
-                }
-
-                val roomLogs = db.gateLogDao().getAllGateLogs()
-                if (roomLogs.isEmpty()) {
-                    db.gateLogDao().insertGateLogs(_gateLogs.value.map { GateLogEntity.fromGateLog(it) })
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
-        // 5. Start real-time multi-device cloud synchronization and notifications
+        // 4. Start real-time multi-device cloud synchronization and notifications
         CloudSyncManager.startSync(appCtx, this)
     }
 
@@ -470,30 +436,14 @@ class OutpassRepository {
         val list = _users.value
         appContext?.let { ctx ->
             LocalBackupStorage.saveUsers(ctx, list)
-            repoScope.launch {
-                try {
-                    val db = AppDatabase.getDatabase(ctx)
-                    db.userDao().insertUsers(list.map { UserEntity.fromUser(it) })
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
+            CloudSyncManager.pushUsersToCloud(ctx, list)
         }
-        CloudSyncManager.pushUsersToCloud(list)
     }
 
     private fun persistOutpasses() {
         val list = _outpasses.value
         appContext?.let { ctx ->
             LocalBackupStorage.saveOutpasses(ctx, list)
-            repoScope.launch {
-                try {
-                    val db = AppDatabase.getDatabase(ctx)
-                    db.outpassDao().insertOutpasses(list.map { OutpassEntity.fromOutpass(it) })
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
         }
         CloudSyncManager.pushOutpassesToCloud(list)
     }
@@ -502,14 +452,6 @@ class OutpassRepository {
         _users.value = syncedUsers
         appContext?.let { ctx ->
             LocalBackupStorage.saveUsers(ctx, syncedUsers)
-            repoScope.launch {
-                try {
-                    val db = AppDatabase.getDatabase(ctx)
-                    db.userDao().insertUsers(syncedUsers.map { UserEntity.fromUser(it) })
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
         }
     }
 
@@ -517,14 +459,6 @@ class OutpassRepository {
         _outpasses.value = syncedOutpasses
         appContext?.let { ctx ->
             LocalBackupStorage.saveOutpasses(ctx, syncedOutpasses)
-            repoScope.launch {
-                try {
-                    val db = AppDatabase.getDatabase(ctx)
-                    db.outpassDao().insertOutpasses(syncedOutpasses.map { OutpassEntity.fromOutpass(it) })
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
         }
     }
 
@@ -532,14 +466,6 @@ class OutpassRepository {
         val list = _gateLogs.value
         appContext?.let { ctx ->
             LocalBackupStorage.saveGateLogs(ctx, list)
-            repoScope.launch {
-                try {
-                    val db = AppDatabase.getDatabase(ctx)
-                    db.gateLogDao().insertGateLogs(list.map { GateLogEntity.fromGateLog(it) })
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
         }
     }
 
@@ -677,15 +603,6 @@ class OutpassRepository {
                 _currentUser.value = list.firstOrNull()
             }
             persistUsers()
-            appContext?.let { ctx ->
-                repoScope.launch {
-                    try {
-                        AppDatabase.getDatabase(ctx).userDao().deleteUserById(userId)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            }
         }
         return removed
     }

@@ -35,8 +35,16 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.Share
+import android.widget.Toast
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ListAlt
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Warning
+import com.example.util.PdfExporter
+import com.example.ui.components.StatusBadge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -105,14 +113,14 @@ fun AiReportButton(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                imageVector = Icons.Default.AutoAwesome,
-                contentDescription = "AI Report",
+                imageVector = Icons.Default.Description,
+                contentDescription = "Generate Report",
                 tint = Color(0xFFFCD34D),
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "Generate AI Report",
+                text = "Generate Report",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -133,6 +141,7 @@ fun AiReportModal(
 ) {
     val context = LocalContext.current
     val dateTimeDf = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
+    val timeDf = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
     val dateOnlyDf = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
 
     var selectedPreset by remember { mutableStateOf(ReportDatePreset.THIS_WEEK) }
@@ -143,16 +152,17 @@ fun AiReportModal(
     val customStartMs = nowMs - (customDaysBack * 86400_000L)
     val customEndMs = nowMs
 
-    // Live preview of count from actual database before generation
-    val previewCount = remember(selectedPreset, customDaysBack, allOutpasses, currentUser) {
+    // Live list and count of matching student outpass records
+    val filteredOutpasses = remember(selectedPreset, customDaysBack, allOutpasses, currentUser) {
         val (s, e) = OutpassStatisticsCalculator.getDateRangeBounds(selectedPreset, customStartMs, customEndMs)
         val deptScoped = if (currentUser.role == UserRole.ADMIN) allOutpasses
         else allOutpasses.filter { it.department.equals(currentUser.department, ignoreCase = true) }
-        deptScoped.count { pass ->
+        deptScoped.filter { pass ->
             val t = if (pass.appliedAt > 0) pass.appliedAt else pass.outDateTime
             t in s..e || pass.outDateTime in s..e
-        }
+        }.sortedByDescending { if (it.appliedAt > 0) it.appliedAt else it.outDateTime }
     }
+    val previewCount = filteredOutpasses.size
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -419,47 +429,76 @@ fun AiReportModal(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Generate Button with loading indicator
-                    Button(
-                        onClick = {
-                            userWantsReanalyze = false
-                            val start = if (selectedPreset == ReportDatePreset.CUSTOM) customStartMs else null
-                            val end = if (selectedPreset == ReportDatePreset.CUSTOM) customEndMs else null
-                            onGenerate(selectedPreset, start, end)
-                        },
-                        enabled = !isGenerating,
+                    // Action Buttons for Step 1
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = GreenPrimary,
-                            contentColor = Color.White,
-                            disabledContainerColor = Color(0xFF94A3B8)
-                        ),
-                        shape = RoundedCornerShape(14.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        if (isGenerating) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Analyzing Records with Gemini AI...",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        } else {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Generate AI Report ($previewCount Records)",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
+                        OutlinedButton(
+                            onClick = {
+                                val file = PdfExporter.generateAndSavePdf(
+                                    context = context,
+                                    user = currentUser,
+                                    records = filteredOutpasses,
+                                    isClassReport = currentUser.role == UserRole.STAFF_ADVISOR
+                                )
+                                if (file != null) {
+                                    PdfExporter.openOrSharePdf(context, file, isShare = false)
+                                    Toast.makeText(context, "Report downloaded: ${file.name}", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Unable to generate PDF report", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.5.dp, GreenPrimary)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Download PDF", color = GreenPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                userWantsReanalyze = false
+                                val start = if (selectedPreset == ReportDatePreset.CUSTOM) customStartMs else null
+                                val end = if (selectedPreset == ReportDatePreset.CUSTOM) customEndMs else null
+                                onGenerate(selectedPreset, start, end)
+                            },
+                            enabled = !isGenerating,
+                            modifier = Modifier.weight(1.1f).fillMaxHeight(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = GreenPrimary,
+                                contentColor = Color.White,
+                                disabledContainerColor = Color(0xFF94A3B8)
+                            ),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            if (isGenerating) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Analyzing...",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            } else {
+                                Icon(Icons.Default.Description, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Preview Report",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
                     }
                 } else {
@@ -541,33 +580,6 @@ fun AiReportModal(
                                             style = MaterialTheme.typography.labelSmall,
                                             color = GreenDark,
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Fallback warning notice if needed
-                        if (analysis.fallbackWarning != null) {
-                            item {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = AmberContainer),
-                                    border = BorderStroke(1.dp, AmberWarning)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.Warning, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = analysis.fallbackWarning,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = AmberWarning,
-                                            fontWeight = FontWeight.SemiBold,
                                             fontSize = 11.sp
                                         )
                                     }
@@ -759,31 +771,208 @@ fun AiReportModal(
                             }
                         }
 
-                        // ADMINISTRATIVE INSIGHTS
-                        if (analysis.administrativeInsights.isNotEmpty()) {
-                            item {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp),
-                                    colors = CardDefaults.cardColors(containerColor = WhiteCard),
-                                    border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.4f))
-                                ) {
-                                    Column(modifier = Modifier.padding(16.dp)) {
+                        // STUDENT OUTPASS STATEMENT & DETAILS
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = WhiteCard),
+                                border = BorderStroke(1.dp, CardBorderColor)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Lightbulb, contentDescription = null, tint = AmberWarning, modifier = Modifier.size(18.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.ListAlt,
+                                                contentDescription = null,
+                                                tint = GreenDark,
+                                                modifier = Modifier.size(20.dp)
+                                            )
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text(
-                                                text = "ADMINISTRATIVE INSIGHTS",
+                                                text = "STUDENT OUTPASS DETAILS",
                                                 style = MaterialTheme.typography.titleSmall,
                                                 fontWeight = FontWeight.Bold,
-                                                color = AmberWarning
+                                                color = TextDark
                                             )
                                         }
-                                        Spacer(modifier = Modifier.height(10.dp))
-                                        analysis.administrativeInsights.forEach { insight ->
-                                            Row(modifier = Modifier.padding(vertical = 4.dp)) {
-                                                Text("• ", color = AmberWarning, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                                Text(insight, style = MaterialTheme.typography.bodySmall, color = TextDark, lineHeight = 18.sp)
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(GreenContainer)
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = "${filteredOutpasses.size} Records",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = GreenDark
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    if (filteredOutpasses.isEmpty()) {
+                                        Text(
+                                            text = "No student outpasses found for the selected department and period.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextMuted,
+                                            modifier = Modifier.padding(vertical = 12.dp)
+                                        )
+                                    } else {
+                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            filteredOutpasses.forEachIndexed { index, pass ->
+                                                Card(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    shape = RoundedCornerShape(12.dp),
+                                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                                    border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                                                ) {
+                                                    Column(modifier = Modifier.padding(12.dp)) {
+                                                        // Row 1: Student Name, Reg No & Pass ID
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Row(
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                modifier = Modifier.weight(1f)
+                                                            ) {
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(24.dp)
+                                                                        .clip(CircleShape)
+                                                                        .background(GreenContainer),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    Text(
+                                                                        text = "${index + 1}",
+                                                                        fontSize = 11.sp,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        color = GreenDark
+                                                                    )
+                                                                }
+                                                                Spacer(modifier = Modifier.width(8.dp))
+                                                                Column {
+                                                                    Text(
+                                                                        text = pass.studentName,
+                                                                        style = MaterialTheme.typography.titleSmall,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        color = TextDark
+                                                                    )
+                                                                    Text(
+                                                                        text = "Reg No: ${pass.regNo}",
+                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                        fontWeight = FontWeight.SemiBold,
+                                                                        color = GreenDark,
+                                                                        fontSize = 11.sp
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .clip(RoundedCornerShape(6.dp))
+                                                                    .background(Color(0xFFE2E8F0))
+                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = pass.id,
+                                                                    fontSize = 10.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color(0xFF475569)
+                                                                )
+                                                            }
+                                                        }
+
+                                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                                        // Row 2: Outpass Timing (Departure & Return in clean alignment)
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .clip(RoundedCornerShape(8.dp))
+                                                                .background(Color.White)
+                                                                .border(1.dp, Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                Icon(
+                                                                    Icons.Default.Schedule,
+                                                                    contentDescription = null,
+                                                                    tint = GreenPrimary,
+                                                                    modifier = Modifier.size(14.dp)
+                                                                )
+                                                                Spacer(modifier = Modifier.width(4.dp))
+                                                                Text(
+                                                                    text = "Timing:",
+                                                                    fontSize = 11.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = TextMuted
+                                                                )
+                                                            }
+                                                            Text(
+                                                                text = "${timeDf.format(Date(pass.outDateTime))}  →  ${timeDf.format(Date(pass.returnDateTime))}",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = TextDark
+                                                            )
+                                                        }
+
+                                                        Spacer(modifier = Modifier.height(6.dp))
+
+                                                        // Row 3: Reason with destination
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text(
+                                                                text = "Reason: ",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                color = TextMuted
+                                                            )
+                                                            Text(
+                                                                text = pass.reason.ifBlank { "Campus Permission" },
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Medium,
+                                                                color = TextDark
+                                                            )
+                                                            if (pass.destination.isNotBlank()) {
+                                                                Text(
+                                                                    text = " (${pass.destination})",
+                                                                    fontSize = 11.sp,
+                                                                    color = TextMuted
+                                                                )
+                                                            }
+                                                        }
+
+                                                        Spacer(modifier = Modifier.height(6.dp))
+
+                                                        // Row 4: Leave Type & Status
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text(
+                                                                text = pass.type.displayName,
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                color = Color(0xFF64748B)
+                                                            )
+                                                            StatusBadge(status = pass.status)
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -794,55 +983,69 @@ fun AiReportModal(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Action Buttons (Re-analyze & Share summary)
+                    // Action Buttons (Download PDF, Share PDF, Change Filter)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         OutlinedButton(
                             onClick = {
                                 userWantsReanalyze = true
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(0.9f),
                             shape = RoundedCornerShape(12.dp),
                             border = BorderStroke(1.dp, CardBorderColor)
                         ) {
-                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = TextDark, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Re-analyze", fontSize = 12.sp, color = TextDark, fontWeight = FontWeight.SemiBold)
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = TextDark, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Filter", fontSize = 11.sp, color = TextDark, fontWeight = FontWeight.SemiBold)
                         }
 
                         Button(
                             onClick = {
-                                val shareText = buildString {
-                                    appendLine("AI-POWERED OUTPASS REPORT")
-                                    appendLine("Period: ${stats.periodLabel}")
-                                    appendLine("Department: ${stats.department}")
-                                    appendLine("Total: ${stats.totalRequests} | Approved: ${stats.approvedCount} | Pending: ${stats.pendingCount} | Late: ${stats.lateReturnsCount}")
-                                    appendLine()
-                                    appendLine("AI SUMMARY:")
-                                    appendLine(analysis.executiveSummary)
-                                    appendLine()
-                                    appendLine("KEY OBSERVATIONS:")
-                                    analysis.keyObservations.forEach { appendLine("• $it") }
-                                    appendLine()
-                                    appendLine("ADMINISTRATIVE INSIGHTS:")
-                                    analysis.administrativeInsights.forEach { appendLine("• $it") }
+                                val file = PdfExporter.generateAndSavePdf(
+                                    context = context,
+                                    user = currentUser,
+                                    records = filteredOutpasses,
+                                    isClassReport = currentUser.role == UserRole.STAFF_ADVISOR
+                                )
+                                if (file != null) {
+                                    PdfExporter.openOrSharePdf(context, file, isShare = false)
+                                    Toast.makeText(context, "Report downloaded to: ${file.name}", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Could not generate PDF report", Toast.LENGTH_SHORT).show()
                                 }
-                                val sendIntent = Intent().apply {
-                                    action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, shareText)
-                                    type = "text/plain"
-                                }
-                                context.startActivity(Intent.createChooser(sendIntent, "Share AI Outpass Report"))
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1.3f),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = GreenPrimary)
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Share Summary", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            Icon(Icons.Default.Download, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Download PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val file = PdfExporter.generateAndSavePdf(
+                                    context = context,
+                                    user = currentUser,
+                                    records = filteredOutpasses,
+                                    isClassReport = currentUser.role == UserRole.STAFF_ADVISOR
+                                )
+                                if (file != null) {
+                                    PdfExporter.openOrSharePdf(context, file, isShare = true)
+                                } else {
+                                    Toast.makeText(context, "Could not export PDF to share", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1.1f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, GreenPrimary)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = GreenPrimary, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Share PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GreenPrimary)
                         }
                     }
                 }

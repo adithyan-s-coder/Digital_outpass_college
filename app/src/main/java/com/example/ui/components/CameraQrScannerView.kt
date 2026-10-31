@@ -42,6 +42,13 @@ import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.PhotoLibrary
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.InvertedLuminanceSource
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -115,9 +122,22 @@ fun CameraQrScannerView(
         hasCameraPermission = granted
     }
 
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
+    var isDecodingScreenshot by remember { mutableStateOf(false) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            isDecodingScreenshot = true
+            val decoded = decodeQrFromImageUri(context, uri)
+            isDecodingScreenshot = false
+            if (!decoded.isNullOrBlank()) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                Toast.makeText(context, "Screenshot scanned: ${extractPassIdentifier(decoded)}", Toast.LENGTH_SHORT).show()
+                onScanSuccess(decoded)
+            } else {
+                Toast.makeText(context, "Could not find a valid Outpass QR code in selected screenshot.", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -440,6 +460,39 @@ fun CameraQrScannerView(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        // Direct Screenshot / Gallery Photo Scanning Button
+        Button(
+            onClick = {
+                photoPickerLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(46.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF0F172A),
+                contentColor = Color.White
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Default.PhotoLibrary,
+                contentDescription = "Scan Screenshot",
+                modifier = Modifier.size(20.dp),
+                tint = Color.White
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (isDecodingScreenshot) "Decoding Screenshot..." else "Scan QR from Screenshot / Gallery Image",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
         // 1-Tap Quick Scan Test (helps instantly test QR flow in streaming browser emulator)
         Column(
             modifier = Modifier
@@ -659,6 +712,30 @@ private fun processImageProxy(
             } catch (_: Exception) {}
         }
 
+        // 5. Center 65% Viewfinder crop (removes surrounding phone bezel/room background when scanning screenshots)
+        if (result == null && width > 120 && height > 120) {
+            try {
+                val cropW = (width * 0.65).toInt()
+                val cropH = (height * 0.65).toInt()
+                val cropX = (width - cropW) / 2
+                val cropY = (height - cropH) / 2
+                var centerSource: com.google.zxing.LuminanceSource = PlanarYUVLuminanceSource(
+                    yBytes, rowStride, height, cropX, cropY, cropW, cropH, false
+                )
+                for (i in 0 until numRotations) {
+                    if (centerSource.isRotateSupported) {
+                        centerSource = centerSource.rotateCounterClockwise()
+                    }
+                }
+                binaryBitmap = BinaryBitmap(HybridBinarizer(centerSource))
+                result = reader.decodeWithState(binaryBitmap)
+                if (result == null) {
+                    binaryBitmap = BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(centerSource))
+                    result = reader.decodeWithState(binaryBitmap)
+                }
+            } catch (_: Exception) {}
+        }
+
         result?.text?.let { onResult(it) }
     } catch (_: Exception) {
         // Normal frame-by-frame non-match
@@ -666,6 +743,107 @@ private fun processImageProxy(
         reader.reset()
         imageProxy.close()
     }
+}
+
+fun decodeQrFromImageUri(context: Context, uri: Uri): String? {
+    return try {
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeStream(inputStream, null, boundsOptions)
+        inputStream.close()
+
+        val sampleSize = calculateInSampleSize(boundsOptions, 1200, 1200)
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+        }
+        val stream2 = context.contentResolver.openInputStream(uri) ?: return null
+        val bitmap = BitmapFactory.decodeStream(stream2, null, decodeOptions) ?: return null
+        stream2.close()
+
+        val width = bitmap.width
+        val height = bitmap.height
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        val reader = MultiFormatReader().apply {
+            setHints(
+                mapOf(
+                    DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
+                    DecodeHintType.TRY_HARDER to true,
+                    DecodeHintType.CHARACTER_SET to "UTF-8"
+                )
+            )
+        }
+
+        // 1. Full Image RGBLuminanceSource
+        val fullSource = RGBLuminanceSource(width, height, pixels)
+        val fullBinarizers = listOf(
+            HybridBinarizer(fullSource),
+            com.google.zxing.common.GlobalHistogramBinarizer(fullSource),
+            HybridBinarizer(InvertedLuminanceSource(fullSource))
+        )
+        for (b in fullBinarizers) {
+            try {
+                val res = reader.decodeWithState(BinaryBitmap(b))
+                if (res != null && res.text.isNotBlank()) return res.text
+            } catch (_: Exception) {}
+            reader.reset()
+        }
+
+        // 2. Center crop (75%)
+        val cropW = (width * 0.75).toInt()
+        val cropH = (height * 0.75).toInt()
+        val cropX = (width - cropW) / 2
+        val cropY = (height - cropH) / 2
+        if (cropW > 50 && cropH > 50) {
+            val croppedSource = fullSource.crop(cropX, cropY, cropW, cropH)
+            val cropBinarizers = listOf(
+                HybridBinarizer(croppedSource),
+                com.google.zxing.common.GlobalHistogramBinarizer(croppedSource)
+            )
+            for (b in cropBinarizers) {
+                try {
+                    val res = reader.decodeWithState(BinaryBitmap(b))
+                    if (res != null && res.text.isNotBlank()) return res.text
+                } catch (_: Exception) {}
+                reader.reset()
+            }
+        }
+
+        // 3. Tighter center crop (50%)
+        val tightW = (width * 0.50).toInt()
+        val tightH = (height * 0.50).toInt()
+        val tightX = (width - tightW) / 2
+        val tightY = (height - tightH) / 2
+        if (tightW > 50 && tightH > 50) {
+            val tightSource = fullSource.crop(tightX, tightY, tightW, tightH)
+            try {
+                val res = reader.decodeWithState(BinaryBitmap(HybridBinarizer(tightSource)))
+                if (res != null && res.text.isNotBlank()) return res.text
+            } catch (_: Exception) {}
+            reader.reset()
+        }
+
+        null
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
+private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+    val height = options.outHeight
+    val width = options.outWidth
+    var inSampleSize = 1
+    if (height > reqHeight || width > reqWidth) {
+        val halfHeight = height / 2
+        val halfWidth = width / 2
+        while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+            inSampleSize *= 2
+        }
+    }
+    return inSampleSize
 }
 
 private fun extractPassIdentifier(rawText: String): String {

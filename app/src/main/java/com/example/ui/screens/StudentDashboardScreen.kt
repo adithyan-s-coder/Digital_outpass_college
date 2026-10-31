@@ -412,7 +412,7 @@ fun DigitalGatePassCard(outpass: Outpass) {
                             )
                         }
                     }
-                } else if (outpass.isQrUsed || outpass.status == OutpassStatus.CHECKED_OUT || outpass.status == OutpassStatus.CHECKED_IN) {
+                } else if (outpass.status == OutpassStatus.CHECKED_IN) {
                     Box(
                         modifier = Modifier
                             .size(180.dp)
@@ -425,11 +425,11 @@ fun DigitalGatePassCard(outpass: Outpass) {
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.error)
+                                    .background(EmeraldSuccess)
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
                                 Text(
-                                    text = "QR EXPIRED & USED",
+                                    text = "RETURN VERIFIED",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -437,7 +437,7 @@ fun DigitalGatePassCard(outpass: Outpass) {
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Scanned at Main Gate\nSingle-Use Completed",
+                                text = "Campus Return Logged\nPass Completed Successfully",
                                 fontSize = 10.sp,
                                 color = Color.LightGray,
                                 fontWeight = FontWeight.Medium,
@@ -445,7 +445,7 @@ fun DigitalGatePassCard(outpass: Outpass) {
                             )
                         }
                     }
-                } else if (isQrValidityExpired) {
+                } else if (outpass.status == OutpassStatus.APPROVED && isQrValidityExpired) {
                     Box(
                         modifier = Modifier
                             .size(180.dp)
@@ -512,9 +512,13 @@ fun DigitalGatePassCard(outpass: Outpass) {
 
             // 1-Hour QR Code Validity Window Badge
             val isPendingApproval = outpass.status == OutpassStatus.PENDING_STAFF || outpass.status == OutpassStatus.PENDING_HOD
+            val isCheckedOut = outpass.status == OutpassStatus.CHECKED_OUT
+            val isCheckedIn = outpass.status == OutpassStatus.CHECKED_IN
             val pillColor = when {
                 isPendingApproval -> Color(0xFFF59E0B)
-                isQrValidityExpired -> CrimsonError
+                isCheckedOut -> Color(0xFF38BDF8) // Cyan / Blue for Return pass
+                isCheckedIn -> EmeraldSuccess
+                outpass.status == OutpassStatus.APPROVED && isQrValidityExpired -> CrimsonError
                 else -> EmeraldSuccess
             }
 
@@ -530,7 +534,9 @@ fun DigitalGatePassCard(outpass: Outpass) {
                     Icon(
                         imageVector = when {
                             isPendingApproval -> Icons.Default.Alarm
-                            isQrValidityExpired -> Icons.Default.Info
+                            isCheckedOut -> Icons.Default.QrCodeScanner
+                            isCheckedIn -> Icons.Default.CheckCircle
+                            outpass.status == OutpassStatus.APPROVED && isQrValidityExpired -> Icons.Default.Info
                             else -> Icons.Default.Timer
                         },
                         contentDescription = null,
@@ -540,11 +546,13 @@ fun DigitalGatePassCard(outpass: Outpass) {
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = when {
-                            outpass.status == OutpassStatus.PENDING_STAFF -> "Approval Status: Awaiting Staff Review"
-                            outpass.status == OutpassStatus.PENDING_HOD -> "Approval Status: Awaiting HOD Sign-off"
-                            outpass.isQrUsed || outpass.status == OutpassStatus.CHECKED_OUT -> "QR Status: EXPIRED & USED (Single-Use Completed)"
-                            isQrValidityExpired -> "QR Status: EXPIRED (1-Hour Limit)"
-                            else -> "QR Status: ACTIVE ($qrTimeRemainingText remaining)"
+                            outpass.status == OutpassStatus.PENDING_STAFF -> "Approval Status: Step 1 - Awaiting Staff Review"
+                            outpass.status == OutpassStatus.PENDING_HOD -> "Approval Status: Step 2 - Awaiting HOD Sign-off"
+                            outpass.status == OutpassStatus.CHECKED_OUT -> "QR Status: ACTIVE FOR RETURN (Scan at Gate on Return)"
+                            outpass.status == OutpassStatus.CHECKED_IN -> "QR Status: COMPLETED (Campus Return Verified)"
+                            outpass.status == OutpassStatus.APPROVED && isQrValidityExpired -> "QR Status: EXPIRED (1-Hour Gate Window Ended)"
+                            outpass.status == OutpassStatus.APPROVED -> "QR Status: ACTIVE FOR EXIT ($qrTimeRemainingText remaining)"
+                            else -> "Status: ${outpass.status.displayName}"
                         },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,

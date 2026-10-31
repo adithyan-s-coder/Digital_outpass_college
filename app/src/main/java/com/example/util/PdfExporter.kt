@@ -29,8 +29,9 @@ object PdfExporter {
     ): File? {
         try {
             val pdfDocument = PdfDocument()
-            val pageWidth = 595
-            val pageHeight = 842
+            // Landscape A4 for wide, perfect column alignment
+            val pageWidth = 842
+            val pageHeight = 595
             var pageNumber = 1
 
             var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
@@ -45,22 +46,30 @@ object PdfExporter {
             }
 
             val subtitlePaint = Paint().apply {
-                color = Color.rgb(79, 70, 229) // Indigo Primary
+                color = Color.rgb(16, 185, 129) // Emerald Green
                 textSize = 12f
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 isAntiAlias = true
             }
 
-            val bodyPaint = Paint().apply {
-                color = Color.rgb(51, 65, 85) // Slate 700
+            val metaPaint = Paint().apply {
+                color = Color.rgb(71, 85, 105) // Slate 600
                 textSize = 10f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 isAntiAlias = true
             }
 
             val boldBodyPaint = Paint().apply {
-                color = Color.rgb(15, 23, 42)
-                textSize = 10f
+                color = Color.rgb(15, 23, 42) // Slate 900
+                textSize = 9.5f
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                isAntiAlias = true
+            }
+
+            val regularBodyPaint = Paint().apply {
+                color = Color.rgb(51, 65, 85) // Slate 700
+                textSize = 9.5f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 isAntiAlias = true
             }
 
@@ -68,96 +77,147 @@ object PdfExporter {
                 color = Color.rgb(241, 245, 249) // Slate 100
             }
 
+            val zebraBgPaint = Paint().apply {
+                color = Color.rgb(248, 250, 252) // Slate 50
+            }
+
             val linePaint = Paint().apply {
                 color = Color.rgb(226, 232, 240)
                 strokeWidth = 1f
             }
 
-            val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())
+            val dateStr = SimpleDateFormat("dd/MM/yyyy hh:mm a", Locale.getDefault()).format(Date())
+            val timingDf = SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
 
-            var y = 40f
+            var y = 35f
 
             // Document Header
-            val reportTitle = if (isClassReport) "CLASS STUDENTS OUTPASS STATEMENT" else "DEPARTMENT STUDENTS OUTPASS STATEMENT"
+            val reportTitle = if (isClassReport) "CLASS ADVISOR STUDENT OUTPASS STATEMENT" else "HOD DEPARTMENT OUTPASS AUDIT REPORT"
             canvas.drawText("VETIAS CAMPUS DIGITAL OUTPASS SYSTEM", 30f, y, titlePaint)
-            y += 22f
+            y += 20f
             canvas.drawText(reportTitle, 30f, y, subtitlePaint)
             y += 18f
 
-            val roleTitle = if (user.role == UserRole.STAFF_ADVISOR) "Class Advisor" else "HOD"
-            val scopeText = "$roleTitle: ${user.name} | Dept: ${user.department}"
-            canvas.drawText("$scopeText | Generated: $dateStr | Total Records: ${records.size}", 30f, y, bodyPaint)
-            y += 16f
+            val roleTitle = if (user.role == UserRole.STAFF_ADVISOR) "Class Advisor" else if (user.role == UserRole.HOD) "Head of Department" else "Admin"
+            val scopeText = "$roleTitle: ${user.name} | Department: ${user.department}"
+            canvas.drawText("$scopeText | Generated: $dateStr | Total Records: ${records.size}", 30f, y, metaPaint)
+            y += 14f
 
             canvas.drawLine(30f, y, pageWidth - 30f, y, linePaint)
-            y += 16f
+            y += 12f
 
-            // Table Header
-            canvas.drawRect(30f, y, pageWidth - 30f, y + 24f, headerBgPaint)
-            val headerY = y + 16f
-            canvas.drawText("PASS ID", 35f, headerY, boldBodyPaint)
-            canvas.drawText("STUDENT & REG NO", 110f, headerY, boldBodyPaint)
-            canvas.drawText("TYPE", 240f, headerY, boldBodyPaint)
-            canvas.drawText("DESTINATION", 305f, headerY, boldBodyPaint)
-            canvas.drawText("STATUS", 435f, headerY, boldBodyPaint)
-            canvas.drawText("OUT DATE", 510f, headerY, boldBodyPaint)
-            y += 30f
+            // Table Header definition with exact column alignments
+            val colSl = 32f
+            val colPassId = 65f
+            val colStudent = 145f
+            val colRegNo = 275f
+            val colTiming = 360f
+            val colReason = 530f
+            val colStatus = 705f
+
+            fun drawTableHeader(curY: Float) {
+                canvas.drawRect(30f, curY, pageWidth - 30f, curY + 24f, headerBgPaint)
+                val hY = curY + 16f
+                canvas.drawText("#", colSl, hY, boldBodyPaint)
+                canvas.drawText("PASS ID", colPassId, hY, boldBodyPaint)
+                canvas.drawText("STUDENT NAME", colStudent, hY, boldBodyPaint)
+                canvas.drawText("REGISTER NO", colRegNo, hY, boldBodyPaint)
+                canvas.drawText("OUTPASS TIMING", colTiming, hY, boldBodyPaint)
+                canvas.drawText("REASON", colReason, hY, boldBodyPaint)
+                canvas.drawText("TYPE & STATUS", colStatus, hY, boldBodyPaint)
+                canvas.drawLine(30f, curY + 24f, pageWidth - 30f, curY + 24f, linePaint)
+            }
+
+            drawTableHeader(y)
+            y += 28f
 
             // Rows
             if (records.isEmpty()) {
-                canvas.drawText("No outpass records found for this export scope.", 35f, y + 12f, bodyPaint)
-                y += 24f
+                canvas.drawText("No outpass records found for the selected department/period.", 40f, y + 14f, regularBodyPaint)
+                y += 28f
             } else {
-                for (outpass in records) {
-                    if (y > pageHeight - 70) {
+                for ((index, outpass) in records.withIndex()) {
+                    if (y > pageHeight - 65) {
                         pdfDocument.finishPage(page)
                         pageNumber++
                         pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
                         page = pdfDocument.startPage(pageInfo)
                         canvas = page.canvas
-                        y = 40f
+                        y = 35f
+                        drawTableHeader(y)
+                        y += 28f
+                    }
+
+                    // Zebra background for clean readability
+                    if (index % 2 == 1) {
+                        canvas.drawRect(30f, y - 4f, pageWidth - 30f, y + 20f, zebraBgPaint)
                     }
 
                     val rowY = y + 12f
-                    canvas.drawText(outpass.id, 35f, rowY, boldBodyPaint)
-                    val studentDesc = if (outpass.studentName.length > 17) outpass.studentName.take(15) + ".." else outpass.studentName
-                    canvas.drawText("$studentDesc (${outpass.regNo})", 110f, rowY, bodyPaint)
-                    canvas.drawText(outpass.type.name, 240f, rowY, bodyPaint)
-                    val destDesc = if (outpass.destination.length > 18) outpass.destination.take(16) + ".." else outpass.destination
-                    canvas.drawText(destDesc, 305f, rowY, bodyPaint)
-                    canvas.drawText(outpass.status.displayName, 435f, rowY, boldBodyPaint)
-                    val outDateShort = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()).format(Date(outpass.outDateTime))
-                    canvas.drawText(outDateShort, 510f, rowY, bodyPaint)
+
+                    // SL
+                    canvas.drawText("${index + 1}", colSl, rowY, regularBodyPaint)
+
+                    // PASS ID
+                    canvas.drawText(outpass.id, colPassId, rowY, boldBodyPaint)
+
+                    // STUDENT NAME
+                    val sName = if (outpass.studentName.length > 20) outpass.studentName.take(18) + ".." else outpass.studentName
+                    canvas.drawText(sName, colStudent, rowY, boldBodyPaint)
+
+                    // REGISTER NO
+                    canvas.drawText(outpass.regNo, colRegNo, rowY, regularBodyPaint)
+
+                    // OUTPASS TIMING (Formatted cleanly: e.g. "23 Oct, 09:30 AM → 23 Oct, 02:00 PM")
+                    val outTimeStr = timingDf.format(Date(outpass.outDateTime))
+                    val retTimeStr = timingDf.format(Date(outpass.returnDateTime))
+                    val timingStr = "$outTimeStr → $retTimeStr"
+                    canvas.drawText(timingStr, colTiming, rowY, regularBodyPaint)
+
+                    // REASON
+                    val cleanReason = if (outpass.reason.length > 28) outpass.reason.take(26) + ".." else outpass.reason
+                    canvas.drawText(cleanReason, colReason, rowY, regularBodyPaint)
+
+                    // TYPE & STATUS
+                    val statusText = "${outpass.type.name} • ${outpass.status.displayName}"
+                    val statusPaint = if (outpass.status.name.contains("APPROVED") || outpass.status.name.contains("CHECKED_IN")) {
+                        Paint(boldBodyPaint).apply { color = Color.rgb(16, 185, 129) }
+                    } else if (outpass.status.name.contains("REJECTED")) {
+                        Paint(boldBodyPaint).apply { color = Color.rgb(239, 68, 68) }
+                    } else {
+                        boldBodyPaint
+                    }
+                    canvas.drawText(statusText, colStatus, rowY, statusPaint)
 
                     y += 22f
-                    canvas.drawLine(30f, y, pageWidth - 30f, y, linePaint)
-                    y += 4f
+                    canvas.drawLine(30f, y - 2f, pageWidth - 30f, y - 2f, linePaint)
                 }
             }
 
             // Summary Footer
-            y += 20f
-            if (y > pageHeight - 80) {
+            y += 14f
+            if (y > pageHeight - 65) {
                 pdfDocument.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
                 page = pdfDocument.startPage(pageInfo)
                 canvas = page.canvas
-                y = 40f
+                y = 35f
             }
 
-            canvas.drawRect(30f, y, pageWidth - 30f, y + 42f, headerBgPaint)
-            val footerY = y + 18f
-            canvas.drawText("Official Document Verified by VETIAS Campus Security & Administration", 40f, footerY, boldBodyPaint)
-            canvas.drawText("Note: This is an official digital statement generated for academic audit purposes.", 40f, footerY + 14f, bodyPaint)
+            canvas.drawRect(30f, y, pageWidth - 30f, y + 36f, headerBgPaint)
+            val footerY = y + 15f
+            canvas.drawText("Official Outpass Report • Verified by VETIAS Campus Security & Academic Administration", 40f, footerY, boldBodyPaint)
+            canvas.drawText("Contains Student Name, Register Number, Approved Timing, and Stated Departure Reason for Official Audit.", 40f, footerY + 14f, metaPaint)
 
             pdfDocument.finishPage(page)
 
-            // Save File
+            // Save File to Downloads
+            val deptClean = user.department.replace(" ", "_").replace("&", "And")
             val fileName = if (isClassReport) {
-                "Class_Outpass_Records_${user.department.replace(" ", "_")}.pdf"
+                "Class_Outpass_Report_${deptClean}_${System.currentTimeMillis() % 10000}.pdf"
             } else {
-                "HOD_Dept_Outpass_Records_${user.department.replace(" ", "_")}.pdf"
+                "HOD_Dept_Outpass_Report_${deptClean}_${System.currentTimeMillis() % 10000}.pdf"
             }
 
             val downloadsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
@@ -186,18 +246,18 @@ object PdfExporter {
                 if (isShare) {
                     type = "application/pdf"
                     putExtra(Intent.EXTRA_STREAM, uri)
-                    putExtra(Intent.EXTRA_SUBJECT, "Outpass PDF Export: ${file.name}")
+                    putExtra(Intent.EXTRA_SUBJECT, "Outpass PDF Report: ${file.name}")
                 } else {
                     setDataAndType(uri, "application/pdf")
                 }
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-            val chooser = Intent.createChooser(intent, if (isShare) "Share Outpass PDF" else "Open Outpass PDF")
+            val chooser = Intent.createChooser(intent, if (isShare) "Share Outpass PDF Report" else "Open Downloaded Outpass Report")
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(chooser)
         } catch (e: Exception) {
-            Toast.makeText(context, "Saved PDF to: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Report saved: ${file.name}", Toast.LENGTH_LONG).show()
         }
     }
 }

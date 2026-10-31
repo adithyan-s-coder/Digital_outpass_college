@@ -50,12 +50,11 @@ object GeminiReportService {
             ""
         }
 
-        // If no real API key is configured in AI Studio secrets, use intelligent fallback
+        // Seamless local rule-based statistical summary
         if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
-            logW(TAG, "GEMINI_API_KEY is not set or using placeholder. Generating local rule-based summary.")
             return@withContext generateLocalSummary(
                 statistics,
-                fallbackWarning = "AI summary is temporarily unavailable (API key not configured). The calculated report statistics are still available."
+                fallbackWarning = null
             )
         }
 
@@ -95,7 +94,7 @@ object GeminiReportService {
                 logE(TAG, "Gemini API request failed with HTTP ${response.code}: $responseBody")
                 return@withContext generateLocalSummary(
                     statistics,
-                    fallbackWarning = "AI summary is temporarily unavailable. The calculated report statistics are still available."
+                    fallbackWarning = null
                 )
             }
 
@@ -104,7 +103,7 @@ object GeminiReportService {
             if (candidates == null || candidates.length() == 0) {
                 return@withContext generateLocalSummary(
                     statistics,
-                    fallbackWarning = "AI summary is temporarily unavailable. The calculated report statistics are still available."
+                    fallbackWarning = null
                 )
             }
 
@@ -118,7 +117,7 @@ object GeminiReportService {
             if (text.isBlank()) {
                 return@withContext generateLocalSummary(
                     statistics,
-                    fallbackWarning = "AI summary is temporarily unavailable. The calculated report statistics are still available."
+                    fallbackWarning = null
                 )
             }
 
@@ -127,7 +126,7 @@ object GeminiReportService {
             logE(TAG, "Error executing Gemini analysis: ${e.message}", e)
             generateLocalSummary(
                 statistics,
-                fallbackWarning = "AI summary is temporarily unavailable. The calculated report statistics are still available."
+                fallbackWarning = null
             )
         }
     }
