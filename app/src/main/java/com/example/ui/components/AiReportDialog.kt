@@ -74,6 +74,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.models.CompleteAiReport
 import com.example.data.models.Outpass
+import com.example.data.models.OutpassType
 import com.example.data.models.ReportDatePreset
 import com.example.data.models.User
 import com.example.data.models.UserRole
@@ -920,7 +921,11 @@ fun AiReportModal(
                                                                 )
                                                             }
                                                             Text(
-                                                                text = "${timeDf.format(Date(pass.outDateTime))}  →  ${timeDf.format(Date(pass.returnDateTime))}",
+                                                                text = if (pass.type == OutpassType.HOME) {
+                                                                    "Out: ${timeDf.format(Date(pass.outDateTime))} (Home Leave)"
+                                                                } else {
+                                                                    "${timeDf.format(Date(pass.outDateTime))}  →  ${timeDf.format(Date(pass.returnDateTime))}"
+                                                                },
                                                                 fontSize = 11.sp,
                                                                 fontWeight = FontWeight.Bold,
                                                                 color = TextDark

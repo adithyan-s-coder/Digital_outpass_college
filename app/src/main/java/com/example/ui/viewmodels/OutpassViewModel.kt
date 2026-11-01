@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 class OutpassViewModel(
     private val repository: OutpassRepository = OutpassRepository.getInstance()
@@ -75,6 +76,26 @@ class OutpassViewModel(
             if (filter != null) list.filter { it.status == filter } else list
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Tracks whether the currently logged-in student has already submitted an outpass today
+    val hasAppliedToday: StateFlow<Boolean> = combine(
+        studentOutpasses,
+        currentUser
+    ) { passes, user ->
+        if (user == null) false
+        else {
+            val todayCal = Calendar.getInstance()
+            val y = todayCal.get(Calendar.YEAR)
+            val d = todayCal.get(Calendar.DAY_OF_YEAR)
+            passes.any { pass ->
+                if (pass.status == OutpassStatus.REJECTED) false
+                else {
+                    val pCal = Calendar.getInstance().apply { timeInMillis = pass.appliedAt }
+                    pCal.get(Calendar.YEAR) == y && pCal.get(Calendar.DAY_OF_YEAR) == d
+                }
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     // Active Pass for Student (Prioritizes newly applied passes in workflow, or student selected pass)
     val activeStudentPass: StateFlow<Outpass?> = combine(
@@ -259,6 +280,14 @@ class OutpassViewModel(
             _userMessage.value = "Only logged-in students can apply for an outpass."
             return
         }
+
+        val existingToday = repository.getStudentOutpassAppliedToday(user)
+        if (existingToday != null) {
+            _selectedPassId.value = existingToday.id
+            _userMessage.value = "Daily Limit: You can only apply for 1 outpass per day. Already submitted ${existingToday.id} today."
+            return
+        }
+
         val pass = repository.applyOutpass(user, type, destination, reason, outDateTime, returnDateTime)
         _selectedPassId.value = pass.id // Auto-focus newly applied pass on the student dashboard!
         _userMessage.value = "Outpass request ${pass.id} submitted for Staff Advisor approval!"

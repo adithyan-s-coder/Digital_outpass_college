@@ -121,6 +121,7 @@ fun MainApp(
     val isGeneratingAiReport by viewModel.isGeneratingReport.collectAsState()
     val aiReportError by viewModel.aiReportError.collectAsState()
     val scannedPassForVerification by viewModel.scannedPassForVerification.collectAsState()
+    val hasAppliedToday by viewModel.hasAppliedToday.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -230,6 +231,7 @@ fun MainApp(
                                     )
                                     1 -> ApplyOutpassScreen(
                                         currentUser = currentUser,
+                                        hasAppliedToday = hasAppliedToday,
                                         onSubmitOutpass = { type, dest, reason, outT, retT ->
                                             viewModel.applyOutpass(type, dest, reason, outT, retT)
                                         },

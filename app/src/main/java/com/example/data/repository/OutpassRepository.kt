@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
@@ -678,6 +679,29 @@ class OutpassRepository {
         }
     }
 
+    /**
+     * Checks if the student has already applied for an outpass on the current calendar day.
+     * College policy permits only 1 outpass per student per day.
+     * Rejected applications are excluded so students can re-apply if their pass was rejected.
+     */
+    fun getStudentOutpassAppliedToday(student: User): Outpass? {
+        val todayCalendar = Calendar.getInstance()
+        val todayYear = todayCalendar.get(Calendar.YEAR)
+        val todayDayOfYear = todayCalendar.get(Calendar.DAY_OF_YEAR)
+
+        return _outpasses.value.firstOrNull { pass ->
+            val isSameStudent = (pass.studentId == student.id || 
+                (student.regNo.isNotBlank() && pass.regNo.equals(student.regNo, ignoreCase = true)))
+            if (!isSameStudent) return@firstOrNull false
+
+            // If a previous outpass today was rejected, allow the student to re-apply
+            if (pass.status == OutpassStatus.REJECTED) return@firstOrNull false
+
+            val passCal = Calendar.getInstance().apply { timeInMillis = pass.appliedAt }
+            passCal.get(Calendar.YEAR) == todayYear && passCal.get(Calendar.DAY_OF_YEAR) == todayDayOfYear
+        }
+    }
+
     fun applyOutpass(
         student: User,
         type: OutpassType,
@@ -686,6 +710,12 @@ class OutpassRepository {
         outDateTime: Long,
         returnDateTime: Long
     ): Outpass {
+        // Enforce 1 outpass per day limit
+        val existingToday = getStudentOutpassAppliedToday(student)
+        if (existingToday != null) {
+            return existingToday
+        }
+
         val passId = "PASS-" + (1000 + _outpasses.value.size + 1)
         val tempPass = Outpass(
             id = passId,

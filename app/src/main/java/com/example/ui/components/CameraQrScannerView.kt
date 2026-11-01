@@ -122,24 +122,6 @@ fun CameraQrScannerView(
         hasCameraPermission = granted
     }
 
-    var isDecodingScreenshot by remember { mutableStateOf(false) }
-
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri != null) {
-            isDecodingScreenshot = true
-            val decoded = decodeQrFromImageUri(context, uri)
-            isDecodingScreenshot = false
-            if (!decoded.isNullOrBlank()) {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                Toast.makeText(context, "Screenshot scanned: ${extractPassIdentifier(decoded)}", Toast.LENGTH_SHORT).show()
-                onScanSuccess(decoded)
-            } else {
-                Toast.makeText(context, "Could not find a valid Outpass QR code in selected screenshot.", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
 
     var isTorchEnabled by remember { mutableStateOf(false) }
     var useFrontCamera by remember { mutableStateOf(false) }
@@ -460,36 +442,6 @@ fun CameraQrScannerView(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Direct Screenshot / Gallery Photo Scanning Button
-        Button(
-            onClick = {
-                photoPickerLauncher.launch(
-                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                )
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF0F172A),
-                contentColor = Color.White
-            )
-        ) {
-            Icon(
-                imageVector = Icons.Default.PhotoLibrary,
-                contentDescription = "Scan Screenshot",
-                modifier = Modifier.size(20.dp),
-                tint = Color.White
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (isDecodingScreenshot) "Decoding Screenshot..." else "Scan QR from Screenshot / Gallery Image",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
 
         Spacer(modifier = Modifier.height(10.dp))
 
@@ -635,237 +587,90 @@ private fun processImageProxy(
     onResult: (String) -> Unit
 ) {
     try {
-        val plane = imageProxy.planes[0]
-        val buffer = plane.buffer
-        val rowStride = plane.rowStride
-        val width = imageProxy.width
-        val height = imageProxy.height
-
-        val yBytes = ByteArray(buffer.remaining())
-        buffer.get(yBytes)
-
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
-        var source: com.google.zxing.LuminanceSource = PlanarYUVLuminanceSource(
-            yBytes,
-            rowStride,
-            height,
-            0,
-            0,
-            width,
-            height,
-            false
-        )
-
-        // Apply device orientation rotation to make the camera frame upright
-        val numRotations = when (rotationDegrees) {
-            90 -> 3  // 3 * 270° = 90° clockwise
-            180 -> 2
-            270 -> 1 // 1 * 270° = 90° counter-clockwise
-            else -> 0
-        }
-        for (i in 0 until numRotations) {
-            if (source.isRotateSupported) {
-                source = source.rotateCounterClockwise()
+        // Convert CameraX frame to upright RGBLuminanceSource
+        var source: com.google.zxing.LuminanceSource? = null
+        try {
+            val bitmap = imageProxy.toBitmap()
+            val finalBitmap = if (rotationDegrees != 0) {
+                val matrix = android.graphics.Matrix().apply {
+                    postRotate(rotationDegrees.toFloat())
+                }
+                android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            } else {
+                bitmap
             }
+            val w = finalBitmap.width
+            val h = finalBitmap.height
+            val pixels = IntArray(w * h)
+            finalBitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+            if (finalBitmap != bitmap) finalBitmap.recycle()
+            bitmap.recycle()
+            source = RGBLuminanceSource(w, h, pixels)
+        } catch (_: Exception) {
+            // Safe fallback to direct YUV buffer if toBitmap fails
+            try {
+                val plane = imageProxy.planes[0]
+                val buffer = plane.buffer
+                val rowStride = plane.rowStride
+                val w = imageProxy.width
+                val h = imageProxy.height
+                val yBytes = ByteArray(buffer.remaining())
+                buffer.get(yBytes)
+                source = PlanarYUVLuminanceSource(yBytes, rowStride, h, 0, 0, w, h, false)
+            } catch (_: Exception) {}
         }
 
-        // 1. HybridBinarizer on upright image
-        var binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+        if (source == null) return
+
+        // Strategy 1: Standard HybridBinarizer (best for daylight / printed QR)
         var result = try {
-            reader.decodeWithState(binaryBitmap)
+            reader.decodeWithState(BinaryBitmap(HybridBinarizer(source)))
         } catch (_: Exception) {
             null
         }
 
-        // 2. GlobalHistogramBinarizer on upright image (specialized for illuminated phone screens)
+        // Strategy 2: GlobalHistogramBinarizer (specifically decodes backlit phone screens & reflections)
         if (result == null) {
             try {
-                binaryBitmap = BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(source))
-                result = reader.decodeWithState(binaryBitmap)
+                reader.reset()
+                result = reader.decodeWithState(BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(source)))
             } catch (_: Exception) {}
         }
 
-        // 3. Fallback: try unrotated original if sensor was already upright
-        if (result == null && numRotations > 0) {
+        // Strategy 3: Center 70% Viewfinder crop (focuses strictly inside reticle without background noise)
+        if (result == null && source.width > 100 && source.height > 100) {
+            val cropW = (source.width * 0.70).toInt()
+            val cropH = (source.height * 0.70).toInt()
+            val cropX = (source.width - cropW) / 2
+            val cropY = (source.height - cropH) / 2
             try {
-                val origSource = PlanarYUVLuminanceSource(yBytes, rowStride, height, 0, 0, width, height, false)
-                binaryBitmap = BinaryBitmap(HybridBinarizer(origSource))
-                result = reader.decodeWithState(binaryBitmap)
+                val cropped = source.crop(cropX, cropY, cropW, cropH)
+                reader.reset()
+                result = try {
+                    reader.decodeWithState(BinaryBitmap(HybridBinarizer(cropped)))
+                } catch (_: Exception) {
+                    reader.reset()
+                    reader.decodeWithState(BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(cropped)))
+                }
             } catch (_: Exception) {}
-
-            if (result == null) {
-                try {
-                    val origSource = PlanarYUVLuminanceSource(yBytes, rowStride, height, 0, 0, width, height, false)
-                    binaryBitmap = BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(origSource))
-                    result = reader.decodeWithState(binaryBitmap)
-                } catch (_: Exception) {}
-            }
         }
 
-        // 4. Inverted colors (for dark mode or high-contrast screens)
+        // Strategy 4: Inverted colors (for Dark Mode screens)
         if (result == null) {
             try {
-                val inverted = com.google.zxing.InvertedLuminanceSource(source)
-                binaryBitmap = BinaryBitmap(HybridBinarizer(inverted))
-                result = reader.decodeWithState(binaryBitmap)
-            } catch (_: Exception) {}
-        }
-
-        // 5. Center 65% Viewfinder crop (removes surrounding phone bezel/room background when scanning screenshots)
-        if (result == null && width > 120 && height > 120) {
-            try {
-                val cropW = (width * 0.65).toInt()
-                val cropH = (height * 0.65).toInt()
-                val cropX = (width - cropW) / 2
-                val cropY = (height - cropH) / 2
-                var centerSource: com.google.zxing.LuminanceSource = PlanarYUVLuminanceSource(
-                    yBytes, rowStride, height, cropX, cropY, cropW, cropH, false
-                )
-                for (i in 0 until numRotations) {
-                    if (centerSource.isRotateSupported) {
-                        centerSource = centerSource.rotateCounterClockwise()
-                    }
-                }
-                binaryBitmap = BinaryBitmap(HybridBinarizer(centerSource))
-                result = reader.decodeWithState(binaryBitmap)
-                if (result == null) {
-                    binaryBitmap = BinaryBitmap(com.google.zxing.common.GlobalHistogramBinarizer(centerSource))
-                    result = reader.decodeWithState(binaryBitmap)
-                }
+                reader.reset()
+                val inverted = InvertedLuminanceSource(source)
+                result = reader.decodeWithState(BinaryBitmap(HybridBinarizer(inverted)))
             } catch (_: Exception) {}
         }
 
         result?.text?.let { onResult(it) }
     } catch (_: Exception) {
-        // Normal frame-by-frame non-match
+        // Continuous frame analysis
     } finally {
         reader.reset()
         imageProxy.close()
     }
-}
-
-fun decodeQrFromImageUri(context: Context, uri: Uri): String? {
-    return try {
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeStream(inputStream, null, boundsOptions)
-        inputStream.close()
-
-        val sampleSize = calculateInSampleSize(boundsOptions, 1200, 1200)
-        val decodeOptions = BitmapFactory.Options().apply {
-            inSampleSize = sampleSize
-            inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
-        }
-        val stream2 = context.contentResolver.openInputStream(uri) ?: return null
-        val bitmap = BitmapFactory.decodeStream(stream2, null, decodeOptions) ?: return null
-        stream2.close()
-
-        val width = bitmap.width
-        val height = bitmap.height
-        val pixels = IntArray(width * height)
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-
-        val reader = MultiFormatReader().apply {
-            setHints(
-                mapOf(
-                    DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE),
-                    DecodeHintType.TRY_HARDER to true,
-                    DecodeHintType.CHARACTER_SET to "UTF-8"
-                )
-            )
-        }
-
-        // 1. Full Image RGBLuminanceSource
-        val fullSource = RGBLuminanceSource(width, height, pixels)
-        val fullBinarizers = listOf(
-            HybridBinarizer(fullSource),
-            com.google.zxing.common.GlobalHistogramBinarizer(fullSource),
-            HybridBinarizer(InvertedLuminanceSource(fullSource))
-        )
-        for (b in fullBinarizers) {
-            try {
-                val res = reader.decodeWithState(BinaryBitmap(b))
-                if (res != null && res.text.isNotBlank()) return res.text
-            } catch (_: Exception) {}
-            reader.reset()
-        }
-
-        // 2. Center crop (75%)
-        val cropW = (width * 0.75).toInt()
-        val cropH = (height * 0.75).toInt()
-        val cropX = (width - cropW) / 2
-        val cropY = (height - cropH) / 2
-        if (cropW > 50 && cropH > 50) {
-            val croppedSource = fullSource.crop(cropX, cropY, cropW, cropH)
-            val cropBinarizers = listOf(
-                HybridBinarizer(croppedSource),
-                com.google.zxing.common.GlobalHistogramBinarizer(croppedSource)
-            )
-            for (b in cropBinarizers) {
-                try {
-                    val res = reader.decodeWithState(BinaryBitmap(b))
-                    if (res != null && res.text.isNotBlank()) return res.text
-                } catch (_: Exception) {}
-                reader.reset()
-            }
-        }
-
-        // 3. Tighter center crop (50%)
-        val tightW = (width * 0.50).toInt()
-        val tightH = (height * 0.50).toInt()
-        val tightX = (width - tightW) / 2
-        val tightY = (height - tightH) / 2
-        if (tightW > 50 && tightH > 50) {
-            val tightSource = fullSource.crop(tightX, tightY, tightW, tightH)
-            try {
-                val res = reader.decodeWithState(BinaryBitmap(HybridBinarizer(tightSource)))
-                if (res != null && res.text.isNotBlank()) return res.text
-            } catch (_: Exception) {}
-            reader.reset()
-        }
-
-        null
-    } catch (e: Exception) {
-        e.printStackTrace()
-        null
-    }
-}
-
-private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
-    val height = options.outHeight
-    val width = options.outWidth
-    var inSampleSize = 1
-    if (height > reqHeight || width > reqWidth) {
-        val halfHeight = height / 2
-        val halfWidth = width / 2
-        while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
-            inSampleSize *= 2
-        }
-    }
-    return inSampleSize
-}
-
-private fun extractPassIdentifier(rawText: String): String {
-    val clean = rawText.trim()
-    val passRegex = Regex("""(PASS-\d{3,6})""", RegexOption.IGNORE_CASE)
-    val match = passRegex.find(clean)
-    if (match != null) {
-        return match.groupValues[1].uppercase()
-    }
-
-    if (clean.contains("::")) {
-        val firstToken = clean.substringBefore("::").trim()
-        if (firstToken.isNotBlank()) return firstToken
-    }
-
-    if (clean.startsWith("{") && clean.endsWith("}")) {
-        val jsonIdRegex = Regex(""""id"\s*:\s*"([^"]+)"""")
-        val jsonMatch = jsonIdRegex.find(clean)
-        if (jsonMatch != null) {
-            return jsonMatch.groupValues[1]
-        }
-    }
-
-    return clean
 }

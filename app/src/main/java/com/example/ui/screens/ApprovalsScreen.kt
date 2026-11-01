@@ -60,6 +60,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.models.CompleteAiReport
 import com.example.data.models.Outpass
+import com.example.data.models.OutpassType
 import com.example.data.models.ReportDatePreset
 import com.example.data.models.User
 import com.example.data.models.UserRole
@@ -326,22 +327,33 @@ private fun PendingApprovalCard(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Out: ${df.format(Date(outpass.outDateTime))}",
+                            text = "Outing Time: ${df.format(Date(outpass.outDateTime))}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp
                         )
 
-                        Text(
-                            text = "Return: ${df.format(Date(outpass.returnDateTime))}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = EmeraldSuccess,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp
-                        )
+                        if (outpass.type == OutpassType.HOME) {
+                            Text(
+                                text = "Home Outpass (Going Home)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = EmeraldSuccess,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                        } else {
+                            Text(
+                                text = "Return Time: ${df.format(Date(outpass.returnDateTime))}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = EmeraldSuccess,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
                 }
             }

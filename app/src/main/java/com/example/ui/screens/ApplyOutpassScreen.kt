@@ -72,6 +72,7 @@ import java.util.Locale
 @Composable
 fun ApplyOutpassScreen(
     currentUser: User?,
+    hasAppliedToday: Boolean = false,
     onSubmitOutpass: (OutpassType, String, String, Long, Long) -> Unit,
     onNavigateBack: () -> Unit
 ) {
@@ -153,7 +154,54 @@ fun ApplyOutpassScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Daily Limit Warning Card
+            if (hasAppliedToday) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, CrimsonError.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(CrimsonError.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Alarm,
+                                contentDescription = null,
+                                tint = CrimsonError,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Daily Limit: 1 Outpass Per Day",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.5.sp,
+                                color = CrimsonError
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "College regulations permit only 1 outpass per student per calendar day. You have already applied for an outpass today.",
+                                fontSize = 11.5.sp,
+                                color = TextDark
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+            }
 
             // 1. Select Outpass Type (Only Local and Home)
             Text(
@@ -540,40 +588,66 @@ fun ApplyOutpassScreen(
 
                     Spacer(modifier = Modifier.height(18.dp))
 
-                    GreenAnimatedButton(
-                        onClick = {
-                            val nowMs = System.currentTimeMillis()
-                            val outMs = computeTimeMs(departureDate, departureTime, nowMs)
+                    if (hasAppliedToday) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = CrimsonError.copy(alpha = 0.12f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CrimsonError.copy(alpha = 0.4f))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Alarm, contentDescription = null, tint = CrimsonError, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "Daily Limit Reached (1 Outpass Allowed/Day)",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CrimsonError
+                                )
+                            }
+                        }
+                    } else {
+                        GreenAnimatedButton(
+                            onClick = {
+                                val nowMs = System.currentTimeMillis()
+                                val outMs = computeTimeMs(departureDate, departureTime, nowMs)
 
-                            if (destination.isBlank() || reason.isBlank()) {
-                                errorMsg = "Please enter both destination and purpose details."
-                            } else if (departureDate.isBlank() || departureTime.isBlank()) {
-                                errorMsg = "Please fill in the departure date and time."
-                            } else if (!isHomePass) {
-                                val returnMs = computeTimeMs(arrivalDate, arrivalTime, nowMs + (4 * 3600_000L))
-                                if (arrivalDate.isBlank() || arrivalTime.isBlank()) {
-                                    errorMsg = "Please fill in the arriving date and time."
-                                } else if (returnMs <= outMs) {
-                                    errorMsg = "Arriving time must be after the departure time. Please check the filled date and time."
+                                if (destination.isBlank() || reason.isBlank()) {
+                                    errorMsg = "Please enter both destination and purpose details."
+                                } else if (departureDate.isBlank() || departureTime.isBlank()) {
+                                    errorMsg = "Please fill in the departure date and time."
+                                } else if (!isHomePass) {
+                                    val returnMs = computeTimeMs(arrivalDate, arrivalTime, nowMs + (4 * 3600_000L))
+                                    if (arrivalDate.isBlank() || arrivalTime.isBlank()) {
+                                        errorMsg = "Please fill in the arriving date and time."
+                                    } else if (returnMs <= outMs) {
+                                        errorMsg = "Arriving time must be after the departure time. Please check the filled date and time."
+                                    } else {
+                                        onSubmitOutpass(selectedType, destination.trim(), reason.trim(), outMs, returnMs)
+                                        onNavigateBack()
+                                    }
                                 } else {
-                                    onSubmitOutpass(selectedType, destination.trim(), reason.trim(), outMs, returnMs)
+                                    // For Home Outpass: no arriving time required
+                                    val homeReturnMs = outMs + (14 * 24 * 3600_000L) // 14-day leave window placeholder
+                                    onSubmitOutpass(selectedType, destination.trim(), reason.trim(), outMs, homeReturnMs)
                                     onNavigateBack()
                                 }
-                            } else {
-                                // For Home Outpass: no arriving time required
-                                val homeReturnMs = outMs + (14 * 24 * 3600_000L) // 14-day leave window placeholder
-                                onSubmitOutpass(selectedType, destination.trim(), reason.trim(), outMs, homeReturnMs)
-                                onNavigateBack()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Send, contentDescription = null, tint = Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Submit Digital Outpass Request", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Send, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Submit Digital Outpass Request", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                     }
                 }
             }

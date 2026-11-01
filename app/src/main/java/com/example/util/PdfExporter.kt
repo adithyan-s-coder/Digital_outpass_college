@@ -11,6 +11,7 @@ import android.os.Environment
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.data.models.Outpass
+import com.example.data.models.OutpassType
 import com.example.data.models.User
 import com.example.data.models.UserRole
 import java.io.File
@@ -168,10 +169,14 @@ object PdfExporter {
                     // REGISTER NO
                     canvas.drawText(outpass.regNo, colRegNo, rowY, regularBodyPaint)
 
-                    // OUTPASS TIMING (Formatted cleanly: e.g. "23 Oct, 09:30 AM → 23 Oct, 02:00 PM")
+                    // OUTPASS TIMING (Formatted cleanly: e.g. "23 Oct, 09:30 AM → 23 Oct, 02:00 PM" or "Out: 23 Oct, 09:30 AM" for Home Outpass)
                     val outTimeStr = timingDf.format(Date(outpass.outDateTime))
-                    val retTimeStr = timingDf.format(Date(outpass.returnDateTime))
-                    val timingStr = "$outTimeStr → $retTimeStr"
+                    val timingStr = if (outpass.type == OutpassType.HOME) {
+                        "Out: $outTimeStr (Home Leave)"
+                    } else {
+                        val retTimeStr = timingDf.format(Date(outpass.returnDateTime))
+                        "$outTimeStr → $retTimeStr"
+                    }
                     canvas.drawText(timingStr, colTiming, rowY, regularBodyPaint)
 
                     // REASON

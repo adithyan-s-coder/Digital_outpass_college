@@ -604,12 +604,12 @@ fun DigitalGatePassCard(outpass: Outpass) {
                 Spacer(modifier = Modifier.height(6.dp))
                 DetailRow(label = "Reason", value = outpass.reason, icon = Icons.Default.Info)
                 Spacer(modifier = Modifier.height(6.dp))
-                DetailRow(label = "Valid From", value = df.format(Date(outpass.outDateTime)), icon = Icons.Default.CalendarToday)
+                DetailRow(label = "Outing Time", value = df.format(Date(outpass.outDateTime)), icon = Icons.Default.CalendarToday)
                 Spacer(modifier = Modifier.height(6.dp))
                 if (outpass.type == OutpassType.HOME) {
                     DetailRow(label = "Leave Type", value = "Home Outpass (Going Home Leave)", icon = Icons.Default.Home)
                 } else {
-                    DetailRow(label = "Return Till", value = df.format(Date(outpass.returnDateTime)), icon = Icons.Default.Alarm)
+                    DetailRow(label = "Return Time", value = df.format(Date(outpass.returnDateTime)), icon = Icons.Default.Alarm)
                 }
             }
         }

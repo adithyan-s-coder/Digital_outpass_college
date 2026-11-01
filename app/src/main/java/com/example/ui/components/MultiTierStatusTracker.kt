@@ -135,6 +135,8 @@ fun MultiTierStatusTracker(
             isLast = false
         )
 
+        val isHomePass = outpass.type == com.example.data.models.OutpassType.HOME
+
         // Step 3 Item
         TrackerStepRow(
             title = "3. Gate Security Check-out",
@@ -145,21 +147,23 @@ fun MultiTierStatusTracker(
                 StepState.LOCKED -> "Awaiting full approval"
             },
             state = step3State,
-            isLast = false
+            isLast = isHomePass
         )
 
-        // Step 4 Item
-        TrackerStepRow(
-            title = "4. Gate Security Check-in (Return)",
-            subtitle = when (step4State) {
-                StepState.COMPLETED -> "Campus Return Logged at ${outpass.actualCheckInTime?.let { df.format(Date(it)) } ?: "Main Gate"}"
-                StepState.ACTIVE -> "Currently Outside Campus • Scan QR upon return"
-                StepState.REJECTED -> "N/A"
-                StepState.LOCKED -> "Awaiting gate exit"
-            },
-            state = step4State,
-            isLast = true
-        )
+        // Step 4 Item: Only active & displayed for Local Outpass (Home Outpass finishes upon gate exit)
+        if (!isHomePass) {
+            TrackerStepRow(
+                title = "4. Gate Security Check-in (Return)",
+                subtitle = when (step4State) {
+                    StepState.COMPLETED -> "Campus Return Logged at ${outpass.actualCheckInTime?.let { df.format(Date(it)) } ?: "Main Gate"}"
+                    StepState.ACTIVE -> "Currently Outside Campus • Scan QR upon return"
+                    StepState.REJECTED -> "N/A"
+                    StepState.LOCKED -> "Awaiting gate exit"
+                },
+                state = step4State,
+                isLast = true
+            )
+        }
     }
 }
 

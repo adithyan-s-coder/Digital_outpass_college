@@ -333,30 +333,31 @@ private fun HistoryPassCard(outpass: Outpass, df: SimpleDateFormat) {
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Applied: ${df.format(Date(outpass.appliedAt))}",
+                    text = "Outing Time: ${df.format(Date(outpass.outDateTime))}",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextMuted,
-                    fontSize = 10.sp
+                    fontSize = 11.sp
                 )
 
                 if (outpass.type == OutpassType.HOME) {
                     Text(
-                        text = "Leave: Home Outpass",
+                        text = "Home Outpass (Going Home)",
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextDark,
+                        color = GreenDark,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp
+                        fontSize = 11.sp
                     )
                 } else {
                     Text(
-                        text = "Return: ${df.format(Date(outpass.returnDateTime))}",
+                        text = "Return Time: ${df.format(Date(outpass.returnDateTime))}",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextDark,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp
+                        fontSize = 11.sp
                     )
                 }
             }
