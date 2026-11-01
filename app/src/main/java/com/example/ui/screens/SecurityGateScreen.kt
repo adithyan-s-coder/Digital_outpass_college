@@ -102,7 +102,7 @@ fun SecurityGateScreen(
                     .padding(8.dp),
                 shape = RoundedCornerShape(20.dp),
                 border = androidx.compose.foundation.BorderStroke(2.dp, EmeraldSuccess),
-                colors = CardDefaults.cardColors(containerColor = Slate900)
+                colors = CardDefaults.cardColors(containerColor = Slate800)
             ) {
                 Column(
                     modifier = Modifier
@@ -114,7 +114,7 @@ fun SecurityGateScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(EmeraldSuccess)
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = "PASS VERIFICATION SCAN",
@@ -139,13 +139,15 @@ fun SecurityGateScreen(
                         text = scannedVerificationPass.studentName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = TextDark
                     )
+
+                    Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
                         text = "Reg No: ${scannedVerificationPass.regNo} • ${scannedVerificationPass.department}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = TextMuted
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
@@ -158,31 +160,35 @@ fun SecurityGateScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Slate800)
-                            .padding(12.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .border(1.dp, Slate700, RoundedCornerShape(12.dp))
+                            .padding(14.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Pass Code:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(scannedVerificationPass.id, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = IndigoPrimary)
+                            Text("Pass Code:", fontSize = 12.sp, color = TextMuted)
+                            Text(scannedVerificationPass.id, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = GreenDark)
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Destination:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(scannedVerificationPass.destination, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text("Destination:", fontSize = 12.sp, color = TextMuted)
+                            Text(scannedVerificationPass.destination, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextDark)
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Outpass Type:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(scannedVerificationPass.type.displayName, fontSize = 11.sp, color = Color.White)
+                            Text("Outpass Type:", fontSize = 12.sp, color = TextMuted)
+                            Text(scannedVerificationPass.type.displayName, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextDark)
                         }
                     }
 
@@ -190,9 +196,9 @@ fun SecurityGateScreen(
 
                     if (scannedVerificationPass.status == OutpassStatus.APPROVED) {
                         if (scannedVerificationPass.isQrUsed) {
-                            Text("QR Code has already been used for gate exit.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            Text("QR Code has already been used for gate exit.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         } else if (scannedVerificationPass.isQrExpired()) {
-                            Text("QR Code has expired (1-hour window ended).", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            Text("QR Code has expired (1-hour window ended).", color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         } else {
                             GreenAnimatedButton(
                                 onClick = {
@@ -222,14 +228,19 @@ fun SecurityGateScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     androidx.compose.material3.OutlinedButton(
                         onClick = onDismissVerification,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, GreenPrimary),
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = GreenDark
+                        )
                     ) {
-                        Text("Close / Done", color = Color.White)
+                        Text("Close / Done", fontWeight = FontWeight.Bold, color = GreenDark, fontSize = 14.sp)
                     }
                 }
             }

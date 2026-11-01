@@ -455,7 +455,7 @@ fun CameraQrScannerView(
                 text = "Quick Test Scan (Simulator / Emulator):",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
+                color = TextDark
             )
             Spacer(modifier = Modifier.height(4.dp))
             androidx.compose.foundation.lazy.LazyRow(

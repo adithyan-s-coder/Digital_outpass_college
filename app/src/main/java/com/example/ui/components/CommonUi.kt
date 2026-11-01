@@ -133,17 +133,18 @@ fun StatusBadge(status: OutpassStatus) {
     val (bgColor, textColor, label) = when (status) {
         OutpassStatus.PENDING_STAFF -> Triple(AmberContainer, AmberWarning, "Pending Staff")
         OutpassStatus.PENDING_HOD -> Triple(AmberContainer, AmberWarning, "Pending HOD")
-        OutpassStatus.APPROVED -> Triple(EmeraldContainer, EmeraldSuccess, "Approved")
-        OutpassStatus.CHECKED_OUT -> Triple(IndigoContainer, IndigoPrimary, "Outside Campus")
-        OutpassStatus.CHECKED_IN -> Triple(Slate700, Color.White, "Returned")
+        OutpassStatus.APPROVED -> Triple(EmeraldContainer, GreenDark, "Approved")
+        OutpassStatus.CHECKED_OUT -> Triple(GreenContainer, GreenDark, "Outside Campus")
+        OutpassStatus.CHECKED_IN -> Triple(Color(0xFFE2E8F0), Color(0xFF0F172A), "Returned")
         OutpassStatus.REJECTED -> Triple(CrimsonContainer, CrimsonError, "Rejected")
-        OutpassStatus.EXPIRED -> Triple(Slate700, Color.Gray, "Expired")
+        OutpassStatus.EXPIRED -> Triple(Color(0xFFFEE2E2), Color(0xFF991B1B), "Expired")
     }
 
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
             .background(bgColor)
+            .border(1.dp, textColor.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
         Text(
@@ -159,17 +160,18 @@ fun StatusBadge(status: OutpassStatus) {
 @Composable
 fun RoleBadge(role: UserRole) {
     val (bgColor, textColor) = when (role) {
-        UserRole.STUDENT -> Pair(IndigoContainer, IndigoPrimary)
+        UserRole.STUDENT -> Pair(IndigoContainer, GreenDark)
         UserRole.STAFF_ADVISOR -> Pair(AmberContainer, AmberWarning)
-        UserRole.HOD -> Pair(EmeraldContainer, EmeraldSuccess)
+        UserRole.HOD -> Pair(EmeraldContainer, GreenDark)
         UserRole.SECURITY_OFFICER -> Pair(CrimsonContainer, CrimsonError)
-        UserRole.ADMIN -> Pair(Slate700, Color.White)
+        UserRole.ADMIN -> Pair(Color(0xFFEDE9FE), Color(0xFF5B21B6))
     }
 
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
+            .border(1.dp, textColor.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         Text(

@@ -77,19 +77,22 @@ fun ActiveOutsideScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Students Currently Outside Campus",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = TextDark
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "Real-time active gate exit monitoring",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
+            Spacer(modifier = Modifier.width(10.dp))
 
             Box(
                 modifier = Modifier
@@ -98,10 +101,11 @@ fun ActiveOutsideScreen(
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "${activeOutsidePasses.size} Active Outside",
+                    text = "${activeOutsidePasses.size} Active",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = Color.White,
+                    maxLines = 1
                 )
             }
         }
@@ -132,8 +136,9 @@ fun ActiveOutsideScreen(
                         text = "All Students Present On Campus",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = TextDark
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "There are currently no active student outpasses in checked-out status.",
                         style = MaterialTheme.typography.bodySmall,
